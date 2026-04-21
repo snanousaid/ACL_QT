@@ -31,7 +31,6 @@ static constexpr int    SHM_FPS         = 30;
 class VideoItem : public QQuickPaintedItem
 {
     Q_OBJECT
-    QML_ELEMENT
 
 public:
     explicit VideoItem(QQuickItem *parent = nullptr);
