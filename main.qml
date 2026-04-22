@@ -4,9 +4,9 @@ import ACL 1.0
 
 Window {
     id: root
-    visibility: Window.FullScreen
-    // Physical screen dimensions (eglfs reports landscape 1024×600).
-    // Content is portrait 600×1024 — rotated -90° (CCW) inside this window.
+    visible: true
+    // eglfs fills the physical screen automatically (landscape 1024×600 on A133).
+    // Content is portrait 600×1024 — rotated 90° inside this window.
     width:  1024
     height: 600
     color: "#0d1117"
