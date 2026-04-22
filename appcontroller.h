@@ -35,10 +35,10 @@ private:
     void handleEvent(const QJsonObject &data, const QString &source);
 
     // ── URLs — modifier ici pour changer la config ──────────────────────────
-    const QString m_badgeSocketUrl = QStringLiteral("http://localhost:5000");
-    const QString m_faceSocketUrl  = QStringLiteral("http://localhost:5001");
-    const QString m_faceApiUrl     = QStringLiteral("http://localhost:5050");
-    const QString m_mjpegUrl       = QStringLiteral("http://localhost:5050/video_feed");
+    const QString m_badgeSocketUrl = QStringLiteral("http://192.168.10.132:5000");
+    const QString m_faceSocketUrl  = QStringLiteral("http://192.168.10.132:5001");
+    const QString m_faceApiUrl     = QStringLiteral("http://192.168.10.132:5050");
+    const QString m_mjpegUrl       = QStringLiteral("http://192.168.10.132:5050/video_feed");
     // ────────────────────────────────────────────────────────────────────────
 
     bool m_badgeConnected = false;
