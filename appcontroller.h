@@ -24,7 +24,6 @@ public:
 signals:
     void badgeConnectedChanged();
     void faceConnectedChanged();
-    // granted, fullName, source("badge"|"face"), score(0-1), door, timeStr
     void accessEvent(bool granted, const QString &name, const QString &source,
                      double score, const QString &door, const QString &time);
 
@@ -35,10 +34,12 @@ private slots:
 private:
     void handleEvent(const QJsonObject &data, const QString &source);
 
-    QString m_badgeSocketUrl = QStringLiteral("http://localhost:5000");
-    QString m_faceSocketUrl  = QStringLiteral("http://localhost:5001");
-    QString m_faceApiUrl     = QStringLiteral("http://localhost:5050");
-    QString m_mjpegUrl       = QStringLiteral("http://localhost:5050/video_feed");
+    // ── URLs — modifier ici pour changer la config ──────────────────────────
+    const QString m_badgeSocketUrl = QStringLiteral("http://localhost:5000");
+    const QString m_faceSocketUrl  = QStringLiteral("http://localhost:5001");
+    const QString m_faceApiUrl     = QStringLiteral("http://localhost:5050");
+    const QString m_mjpegUrl       = QStringLiteral("http://localhost:5050/video_feed");
+    // ────────────────────────────────────────────────────────────────────────
 
     bool m_badgeConnected = false;
     bool m_faceConnected  = false;
