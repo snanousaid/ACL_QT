@@ -1,7 +1,11 @@
 #include "appcontroller.h"
 #include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QJsonDocument>
+#include <QJsonArray>
 #include <QDateTime>
 #include <QTime>
+#include <QUrl>
 
 AppController::AppController(QObject *parent)
     : QObject(parent)
@@ -92,4 +96,58 @@ void AppController::resumeRecognition()
     QNetworkRequest req(url);
     req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     m_nam->post(req, QByteArray());
+}
+
+// ── Face users management ──────────────────────────────────────────────────
+void AppController::listFaceUsers()
+{
+    QNetworkRequest req(QUrl(m_faceApiUrl + QStringLiteral("/api/users")));
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit faceApiError(QStringLiteral("list"), reply->errorString());
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (!doc.isArray()) {
+            emit faceApiError(QStringLiteral("list"), QStringLiteral("Réponse invalide"));
+            return;
+        }
+        QVariantList users;
+        for (const QJsonValue &v : doc.array())
+            users.append(v.toObject().toVariantMap());
+        emit faceUsersLoaded(users);
+    });
+}
+
+void AppController::toggleFaceUser(const QString &name)
+{
+    const QUrl url(m_faceApiUrl + QStringLiteral("/api/users/") + name + QStringLiteral("/toggle"));
+    QNetworkRequest req(url);
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    QNetworkReply *reply = m_nam->post(req, QByteArray());
+    connect(reply, &QNetworkReply::finished, this, [this, reply, name] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit faceApiError(QStringLiteral("toggle"), reply->errorString());
+            return;
+        }
+        emit faceUserMutated(QStringLiteral("toggle"), name);
+    });
+}
+
+void AppController::deleteFaceUser(const QString &name)
+{
+    const QUrl url(m_faceApiUrl + QStringLiteral("/api/users/") + name);
+    QNetworkRequest req(url);
+    QNetworkReply *reply = m_nam->deleteResource(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, name] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit faceApiError(QStringLiteral("delete"), reply->errorString());
+            return;
+        }
+        emit faceUserMutated(QStringLiteral("delete"), name);
+    });
 }

@@ -303,7 +303,15 @@ Window {
             id: adminMenu
             onClosed:      { root.adminVisible = false; controller.resumeRecognition() }
             onOpenNetwork: { /* Task 4 – NetworkConfigModal */ }
-            onOpenFace:    { /* Task 3 – FaceSettingsModal  */ }
+            onOpenFace:    { faceSettings.open() }
+        }
+
+        // ── Face settings modal ───────────────────────────────────────────────
+        FaceSettingsModal {
+            id: faceSettings
+            controller: controller
+            // Re-ouvre l'admin menu en sortant (admin reste pausée)
+            onClosed: adminMenu.open()
         }
 
         // ── Virtual keyboard (shared, z:60) ───────────────────────────────────

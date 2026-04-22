@@ -7,5 +7,6 @@
         <file>VirtualKeyboard.qml</file>
         <file>KbInput.qml</file>
         <file>AdminMenu.qml</file>
+        <file>FaceSettingsModal.qml</file>
     </qresource>
 </RCC>

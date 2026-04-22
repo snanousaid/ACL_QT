@@ -21,11 +21,22 @@ public:
     Q_INVOKABLE void pauseRecognition();
     Q_INVOKABLE void resumeRecognition();
 
+    // ── Face users management (REST → m_faceApiUrl) ─────────────────────────
+    Q_INVOKABLE void listFaceUsers();
+    Q_INVOKABLE void toggleFaceUser(const QString &name);
+    Q_INVOKABLE void deleteFaceUser(const QString &name);
+
 signals:
     void badgeConnectedChanged();
     void faceConnectedChanged();
     void accessEvent(bool granted, const QString &name, const QString &source,
                      double score, const QString &door, const QString &time);
+    // Liste reçue : QVariantList de {name, role, created_at, active, dim}
+    void faceUsersLoaded(const QVariantList &users);
+    // Erreur (réseau ou HTTP non-2xx). msg = description courte.
+    void faceApiError(const QString &op, const QString &msg);
+    // Mutation réussie (toggle/delete) → la modal recharge la liste.
+    void faceUserMutated(const QString &op, const QString &name);
 
 private slots:
     void onBadgeEvent(const QString &evName, const QJsonObject &data);
