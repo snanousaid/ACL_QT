@@ -160,7 +160,7 @@ Window {
 
             MouseArea {
                 anchors.fill: parent
-                onClicked: {
+                onPressed: {
                     settingsBtn.visible = false
                     passwordModal.visible = true
                     root.adminVisible = true
@@ -237,7 +237,7 @@ Window {
                             Text { anchors.centerIn: parent; text: "Annuler"; color: "#94a3b8"; font.pixelSize: 13 }
                             MouseArea {
                                 anchors.fill: parent
-                                onClicked: {
+                                onPressed: {
                                     passwordModal.visible = false
                                     pwInput.text = ""; keyboard.close()
                                     pwError.visible = false
@@ -253,7 +253,7 @@ Window {
                             Text { anchors.centerIn: parent; text: "Valider"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold }
                             MouseArea {
                                 anchors.fill: parent
-                                onClicked: checkPassword()
+                                onPressed: checkPassword()
                             }
                         }
                     }
@@ -266,10 +266,9 @@ Window {
                 if (pwInput.text === "2899100*-+") {
                     keyboard.close()
                     passwordModal.visible = false
-                    pwInput.text = ""; keyboard.close()
+                    pwInput.text = ""
                     pwError.visible = false
-                    root.adminVisible = false
-                    controller.resumeRecognition()
+                    adminMenu.open()   // → admin menu, recognition reste pausée
                 } else {
                     pwError.visible = true
                 }
@@ -278,7 +277,7 @@ Window {
             MouseArea {
                 anchors.fill: parent
                 z: -1
-                onClicked: {
+                onPressed: {
                     passwordModal.visible = false
                     pwInput.text = ""; keyboard.close()
                     pwError.visible = false
@@ -294,6 +293,14 @@ Window {
             anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
             badgeConnected: controller.badgeConnected
             faceConnected:  controller.faceConnected
+        }
+
+        // ── Admin menu ────────────────────────────────────────────────────────
+        AdminMenu {
+            id: adminMenu
+            onClosed:      { root.adminVisible = false; controller.resumeRecognition() }
+            onOpenNetwork: { /* Task 4 – NetworkConfigModal */ }
+            onOpenFace:    { /* Task 3 – FaceSettingsModal  */ }
         }
 
         // ── Virtual keyboard (shared, z:60) ───────────────────────────────────
