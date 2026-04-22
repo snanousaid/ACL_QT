@@ -8,7 +8,7 @@ Rectangle {
     anchors.fill: parent
     color: "transparent"
     visible: false
-    z: 60
+    z: 999   // toujours au-dessus de toute modal (FaceSettings z:50, Enroll z:70…)
 
     property bool   isPassword: false
     property string kbValue:    ""
@@ -80,6 +80,9 @@ Rectangle {
         color: "#020617"
         Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: "#334155" }
 
+        // Absorbe les clics dans la barre (entre les boutons) → ne ferme pas le clavier
+        MouseArea { anchors.fill: parent; onPressed: {} }
+
         Row {
             anchors { fill: parent; leftMargin: 8; rightMargin: 8; topMargin: 9; bottomMargin: 9 }
             spacing: 8
@@ -125,6 +128,9 @@ Rectangle {
         color: "#0f172a"
         height: kbCol.height + 18
         Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: "#334155" }
+
+        // Absorbe les clics dans le corps du clavier (entre les touches) → ne ferme pas
+        MouseArea { anchors.fill: parent; onPressed: {} }
 
         Column {
             id: kbCol
