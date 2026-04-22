@@ -39,7 +39,8 @@ void MjpegItem::startStream()
     stopStream();
     if (m_source.isEmpty()) return;
 
-    QNetworkRequest req(QUrl(m_source));
+    QUrl url(m_source);
+    QNetworkRequest req(url);
     req.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
     m_buf.clear();
     m_reply = m_nam->get(req);
