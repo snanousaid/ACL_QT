@@ -10,18 +10,17 @@ Rectangle {
     property var controller: null
     property var keyboard: null
 
-    // Tabs : "info" | "wifi" | "ethernet"
-    property string tab: "info"
+    property string tab: "info"   // "info" | "wifi" | "ethernet"
 
-    // Data
     property var info: ({})
     property var wifiList: []
     property string errorMsg: ""
     property string statusMsg: ""
     property bool busy: false
 
-    // Wifi form
+    // Wi-Fi form
     property string wifiSelectedSsid: ""
+    property string wifiSelectedSecurity: ""
     property string wifiPassword: ""
     property string wifiMode: "dhcp"
     property string wifiIp: ""
@@ -42,7 +41,7 @@ Rectangle {
         visible = true
         tab = "info"
         errorMsg = ""; statusMsg = ""; busy = false
-        wifiSelectedSsid = ""; wifiPassword = ""
+        wifiSelectedSsid = ""; wifiSelectedSecurity = ""; wifiPassword = ""
         if (controller) controller.getNetworkInfo()
     }
     function close() {
@@ -56,8 +55,7 @@ Rectangle {
         ignoreUnknownSignals: true
         onNetworkInfoLoaded: {
             root.info = info
-            // pré-remplit le formulaire Ethernet à partir du mode détecté
-            if (info.ethMode && info.ethMode.toLowerCase().indexOf("manual") >= 0)
+            if (info.ethMode && String(info.ethMode).toLowerCase().indexOf("manual") >= 0)
                 root.ethMode = "static"
         }
         onWifiNetworksLoaded: {
@@ -68,6 +66,7 @@ Rectangle {
             root.busy = false
             if (ok) {
                 root.statusMsg = "Wi-Fi connecté."
+                root.wifiSelectedSsid = ""
                 if (root.controller) root.controller.getNetworkInfo()
             } else {
                 root.errorMsg = "Connexion Wi-Fi : " + msg
@@ -90,57 +89,59 @@ Rectangle {
 
     MouseArea { anchors.fill: parent; onPressed: root.close() }
 
-    // ── Card ────────────────────────────────────────────────────────────────
+    // ── Carte ───────────────────────────────────────────────────────────────
     Rectangle {
         anchors.centerIn: parent
-        width:  parent.width  - 30
-        height: parent.height - 60
+        width:  parent.width  - 24
+        height: parent.height - 40
         radius: 20
         color: "#0f172a"
         border.color: "#334155"
 
         MouseArea { anchors.fill: parent; onPressed: {} }
 
-        // Header
+        // ─── Header ─────────────────────────────────────────────────────────
         Rectangle {
             id: hdr
             anchors { top: parent.top; left: parent.left; right: parent.right }
-            height: 60
+            height: 58
             color: "transparent"
 
             Row {
                 anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
                 spacing: 12
                 Rectangle {
-                    width: 36; height: 36; radius: 8
-                    color: "#60a5fa33"
-                    Text { anchors.centerIn: parent; text: "📡"; font.pixelSize: 16 }
+                    width: 36; height: 36; radius: 10
+                    color: "#3b82f620"
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 14; height: 14; radius: 7
+                        color: "#3b82f6"
+                    }
                 }
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 2
                     Text { text: "Configuration Réseau"; color: "white"; font.pixelSize: 15; font.weight: Font.Bold }
-                    Text { text: "Wi-Fi / Ethernet"; color: "#64748b"; font.pixelSize: 10 }
+                    Text { text: "Infos et configuration"; color: "#64748b"; font.pixelSize: 10 }
                 }
             }
             Rectangle {
                 anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                width: 36; height: 36; radius: 18
+                width: 34; height: 34; radius: 17
                 color: "#1e293b"
                 Text { anchors.centerIn: parent; text: "✕"; color: "#cbd5e1"; font.pixelSize: 14 }
                 MouseArea { anchors.fill: parent; onPressed: root.close() }
             }
-            Rectangle {
-                anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                height: 1; color: "#1e293b"
-            }
+            Rectangle { anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+                        height: 1; color: "#1e293b" }
         }
 
-        // Tabs
+        // ─── Onglets ────────────────────────────────────────────────────────
         Row {
             id: tabs
-            anchors { top: hdr.bottom; left: parent.left; leftMargin: 8; right: parent.right }
-            height: 40
+            anchors { top: hdr.bottom; left: parent.left; leftMargin: 6; right: parent.right; rightMargin: 6 }
+            height: 42
             spacing: 0
 
             Repeater {
@@ -150,18 +151,19 @@ Rectangle {
                     {id: "ethernet", label: "Ethernet"},
                 ]
                 Rectangle {
-                    width: (tabs.width - 16) / 3
+                    width: (tabs.width) / 3
                     height: tabs.height
                     color: "transparent"
                     Text {
                         anchors.centerIn: parent
                         text: modelData.label
                         color: root.tab === modelData.id ? "#60a5fa" : "#64748b"
-                        font.pixelSize: 12; font.weight: Font.DemiBold
+                        font.pixelSize: 12
+                        font.weight: root.tab === modelData.id ? Font.Bold : Font.Medium
                     }
                     Rectangle {
-                        anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                        height: 2
+                        anchors { bottom: parent.bottom; left: parent.left; right: parent.right; leftMargin: 16; rightMargin: 16 }
+                        height: 2; radius: 1
                         color: root.tab === modelData.id ? "#3b82f6" : "transparent"
                     }
                     MouseArea {
@@ -178,27 +180,24 @@ Rectangle {
                 }
             }
         }
+        Rectangle { anchors { top: tabs.bottom; left: parent.left; right: parent.right }
+                    height: 1; color: "#1e293b" }
 
-        Rectangle {
-            anchors { top: tabs.bottom; left: parent.left; right: parent.right }
-            height: 1; color: "#1e293b"
-        }
-
-        // Banners
+        // ─── Bannières erreur / succès ──────────────────────────────────────
         Column {
             id: banners
-            anchors { top: tabs.bottom; left: parent.left; right: parent.right; topMargin: 10; leftMargin: 12; rightMargin: 12 }
+            anchors { top: tabs.bottom; left: parent.left; right: parent.right
+                      topMargin: 8; leftMargin: 12; rightMargin: 12 }
             spacing: 6
+
             Rectangle {
                 width: parent.width
                 visible: root.errorMsg.length > 0
                 height: visible ? errLbl.implicitHeight + 14 : 0
                 radius: 8; color: "#7f1d1d33"; border.color: "#7f1d1d"
-                Text {
-                    id: errLbl
+                Text { id: errLbl
                     anchors { fill: parent; margins: 7 }
-                    text: root.errorMsg; color: "#fca5a5"; font.pixelSize: 11
-                    wrapMode: Text.WordWrap
+                    text: root.errorMsg; color: "#fca5a5"; font.pixelSize: 11; wrapMode: Text.WordWrap
                 }
             }
             Rectangle {
@@ -206,24 +205,24 @@ Rectangle {
                 visible: root.statusMsg.length > 0
                 height: visible ? okLbl.implicitHeight + 14 : 0
                 radius: 8; color: "#14532d33"; border.color: "#16a34a"
-                Text {
-                    id: okLbl
+                Text { id: okLbl
                     anchors { fill: parent; margins: 7 }
-                    text: root.statusMsg; color: "#86efac"; font.pixelSize: 11
-                    wrapMode: Text.WordWrap
+                    text: root.statusMsg; color: "#86efac"; font.pixelSize: 11; wrapMode: Text.WordWrap
                 }
             }
         }
 
-        // ─────────── Onglet INFO ────────────────────────────────────────────
+        // ═══════════════════════ Onglet INFO ════════════════════════════════
         Flickable {
+            id: infoView
             visible: root.tab === "info"
             anchors {
                 top: banners.bottom; left: parent.left; right: parent.right; bottom: footer.top
-                topMargin: 10; leftMargin: 14; rightMargin: 14; bottomMargin: 8
+                topMargin: 10; leftMargin: 14; rightMargin: 14; bottomMargin: 10
             }
             contentHeight: infoCol.implicitHeight
             clip: true
+            boundsBehavior: Flickable.StopAtBounds
 
             Column {
                 id: infoCol
@@ -232,216 +231,376 @@ Rectangle {
 
                 // Hostname
                 Rectangle {
-                    width: parent.width; height: 50; radius: 10
+                    width: parent.width; height: 54; radius: 12
                     color: "#1e293b"; border.color: "#334155"
                     Column {
-                        anchors { fill: parent; leftMargin: 14; topMargin: 8 }
-                        Text { text: "Hostname"; color: "#64748b"; font.pixelSize: 10 }
-                        Text { text: root.info.hostname || "—"; color: "white"; font.pixelSize: 13; font.weight: Font.DemiBold }
+                        anchors { fill: parent; leftMargin: 14; topMargin: 9 }
+                        spacing: 2
+                        Text { text: "Hostname"; color: "#64748b"; font.pixelSize: 10; font.letterSpacing: 1 }
+                        Text {
+                            text: root.info.hostname || "—"
+                            color: "white"; font.pixelSize: 14; font.weight: Font.DemiBold
+                        }
                     }
                 }
 
-                // Wi-Fi
+                // Bloc Wi-Fi
                 Rectangle {
                     width: parent.width
-                    height: wifiInfoCol.implicitHeight + 20
-                    radius: 10; color: "#1e293b"; border.color: "#334155"
+                    height: wifiInfoCol.implicitHeight + 24
+                    radius: 12; color: "#1e293b"; border.color: "#334155"
                     Column {
                         id: wifiInfoCol
                         anchors { fill: parent; margins: 14 }
-                        spacing: 6
+                        spacing: 8
+
                         Row {
-                            spacing: 8
-                            Text { text: "📶"; font.pixelSize: 14 }
-                            Text { text: "Wi-Fi"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold }
+                            spacing: 10
+                            Rectangle {
+                                width: 24; height: 24; radius: 6
+                                color: "#60a5fa20"
+                                Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: "#60a5fa" }
+                            }
+                            Text { text: "Wi-Fi"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold
+                                   anchors.verticalCenter: parent.verticalCenter }
                         }
-                        Text { text: "Interface : " + (root.info.wifiIface || "—"); color: "#cbd5e1"; font.pixelSize: 11 }
-                        Text { text: "SSID : " + (root.info.wifiSsid || "Non connecté"); color: "#cbd5e1"; font.pixelSize: 11 }
-                        Text { text: "IP : " + (root.info.wifiIp || "—"); color: "#cbd5e1"; font.pixelSize: 11 }
-                        Text { text: "MAC : " + (root.info.wifiMac || "—"); color: "#64748b"; font.pixelSize: 10 }
-                        Text { text: "Mode : " + (root.info.wifiMode || "—"); color: "#64748b"; font.pixelSize: 10 }
+                        KvRow { k: "Interface"; v: root.info.wifiIface || "—" }
+                        KvRow { k: "SSID";      v: root.info.wifiSsid || "Non connecté" }
+                        KvRow { k: "Adresse IP";v: root.info.wifiIp || "—" }
+                        KvRow { k: "MAC";       v: root.info.wifiMac || "—"; dim: true }
+                        KvRow { k: "Mode";      v: root.info.wifiMode || "—"; dim: true }
                     }
                 }
 
-                // Ethernet
+                // Bloc Ethernet
                 Rectangle {
                     width: parent.width
-                    height: ethInfoCol.implicitHeight + 20
-                    radius: 10; color: "#1e293b"; border.color: "#334155"
+                    height: ethInfoCol.implicitHeight + 24
+                    radius: 12; color: "#1e293b"; border.color: "#334155"
                     Column {
                         id: ethInfoCol
                         anchors { fill: parent; margins: 14 }
-                        spacing: 6
+                        spacing: 8
+
                         Row {
-                            spacing: 8
-                            Text { text: "🔌"; font.pixelSize: 14 }
-                            Text { text: "Ethernet"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold }
+                            spacing: 10
+                            Rectangle {
+                                width: 24; height: 24; radius: 6
+                                color: "#22c55e20"
+                                Rectangle { anchors.centerIn: parent; width: 10; height: 6; radius: 1; color: "#22c55e" }
+                            }
+                            Text { text: "Ethernet"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold
+                                   anchors.verticalCenter: parent.verticalCenter }
                         }
-                        Text { text: "Interface : " + (root.info.ethIface || "—"); color: "#cbd5e1"; font.pixelSize: 11 }
-                        Text { text: "IP : " + (root.info.ethIp || "—"); color: "#cbd5e1"; font.pixelSize: 11 }
-                        Text { text: "MAC : " + (root.info.ethMac || "—"); color: "#64748b"; font.pixelSize: 10 }
-                        Text { text: "Mode : " + (root.info.ethMode || "—"); color: "#64748b"; font.pixelSize: 10 }
+                        KvRow { k: "Interface"; v: root.info.ethIface || "—" }
+                        KvRow { k: "Adresse IP";v: root.info.ethIp || "—" }
+                        KvRow { k: "MAC";       v: root.info.ethMac || "—"; dim: true }
+                        KvRow { k: "Mode";      v: root.info.ethMode || "—"; dim: true }
                     }
                 }
             }
         }
 
-        // ─────────── Onglet WI-FI ───────────────────────────────────────────
+        // ═══════════════════════ Onglet WI-FI ═══════════════════════════════
         Item {
+            id: wifiView
             visible: root.tab === "wifi"
             anchors {
                 top: banners.bottom; left: parent.left; right: parent.right; bottom: footer.top
-                topMargin: 10; leftMargin: 14; rightMargin: 14; bottomMargin: 8
+                topMargin: 10; leftMargin: 14; rightMargin: 14; bottomMargin: 10
             }
 
-            // Liste des SSID (si aucun selectionné)
-            Column {
-                visible: root.wifiSelectedSsid === ""
-                anchors.fill: parent
-                spacing: 8
-
-                Row {
-                    width: parent.width
-                    Text {
-                        text: root.busy ? "Scan en cours…" : "Réseaux détectés"
-                        color: "#cbd5e1"; font.pixelSize: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                    Item { width: parent.width - parent.children[0].width - scanBtn.width - 8; height: 1 }
-                    Rectangle {
-                        id: scanBtn
-                        width: 80; height: 28; radius: 6
-                        color: "#1e293b"; border.color: "#334155"
-                        Text { anchors.centerIn: parent; text: "Rescan"; color: "#cbd5e1"; font.pixelSize: 11 }
-                        MouseArea {
-                            anchors.fill: parent
-                            onPressed: {
-                                root.errorMsg = ""; root.statusMsg = ""
-                                root.busy = true
-                                root.controller.scanWifi()
-                            }
+            // En-tête + bouton Rescan
+            Row {
+                id: wifiHeaderRow
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: 30
+                Text {
+                    text: root.busy && root.wifiList.length === 0 ? "Scan…" : "Réseaux détectés"
+                    color: "#cbd5e1"; font.pixelSize: 12; font.weight: Font.DemiBold
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Item { width: parent.width - parent.children[0].width - rescanBtn.width - 6; height: 1 }
+                Rectangle {
+                    id: rescanBtn
+                    width: 76; height: 28; radius: 8
+                    color: "#1e293b"; border.color: "#334155"
+                    anchors.verticalCenter: parent.verticalCenter
+                    Text { anchors.centerIn: parent; text: "Rescan"; color: "#cbd5e1"; font.pixelSize: 11 }
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: !root.busy
+                        onPressed: {
+                            root.errorMsg = ""; root.statusMsg = ""
+                            root.busy = true
+                            root.controller.scanWifi()
                         }
                     }
                 }
+            }
+
+            // ── Liste SSID (hauteur max 5 items ~ 260, au-delà scroll) ──────
+            Rectangle {
+                id: wifiListBox
+                anchors { top: wifiHeaderRow.bottom; left: parent.left; right: parent.right; topMargin: 8 }
+                height: Math.min(5 * 52, Math.max(1, root.wifiList.length) * 52)
+                radius: 10
+                color: "#0b1220"; border.color: "#1e293b"
+                clip: true
+
+                Text {
+                    anchors.centerIn: parent
+                    visible: root.wifiList.length === 0 && !root.busy
+                    text: "Aucun réseau"
+                    color: "#64748b"; font.pixelSize: 11
+                }
 
                 ListView {
-                    clip: true
-                    width: parent.width
-                    height: parent.height - y
+                    id: wifiListView
+                    anchors.fill: parent
+                    anchors.margins: 4
                     model: root.wifiList
-                    spacing: 6
+                    spacing: 4
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
                     delegate: Rectangle {
-                        width: ListView.view.width; height: 48; radius: 8
-                        color: "#1e293b"; border.color: "#334155"
+                        width: wifiListView.width
+                        height: 44; radius: 8
+                        color: root.wifiSelectedSsid === modelData.ssid ? "#1e3a8a" : "#1e293b"
+                        border.color: root.wifiSelectedSsid === modelData.ssid ? "#3b82f6" : "transparent"
+
                         Row {
                             anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
                             spacing: 10
-                            Text {
-                                text: modelData.signal >= 70 ? "▮▮▮▮"
-                                    : modelData.signal >= 50 ? "▮▮▮▯"
-                                    : modelData.signal >= 30 ? "▮▮▯▯"
-                                    :                          "▮▯▯▯"
-                                color: "#60a5fa"; font.pixelSize: 11
+                            // Barres signal
+                            Row {
+                                spacing: 2
                                 anchors.verticalCenter: parent.verticalCenter
+                                Rectangle { width: 3; height: 6;  radius: 1
+                                    color: modelData.signal >= 20 ? "#60a5fa" : "#334155" }
+                                Rectangle { width: 3; height: 10; radius: 1
+                                    color: modelData.signal >= 40 ? "#60a5fa" : "#334155" }
+                                Rectangle { width: 3; height: 14; radius: 1
+                                    color: modelData.signal >= 60 ? "#60a5fa" : "#334155" }
+                                Rectangle { width: 3; height: 18; radius: 1
+                                    color: modelData.signal >= 80 ? "#60a5fa" : "#334155" }
                             }
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: 2
+                                spacing: 1
                                 Text { text: modelData.ssid; color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold }
                                 Text {
-                                    text: (modelData.security || "Ouvert") + " — " + modelData.signal + "%"
+                                    text: (modelData.security && modelData.security.length > 0 ? modelData.security : "Ouvert")
+                                        + "  •  " + modelData.signal + "%"
                                     color: "#64748b"; font.pixelSize: 10
                                 }
                             }
                         }
+
+                        // Indicateur sélection
+                        Rectangle {
+                            visible: root.wifiSelectedSsid === modelData.ssid
+                            anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                            width: 8; height: 8; radius: 4
+                            color: "#3b82f6"
+                        }
+
                         MouseArea {
                             anchors.fill: parent
                             onPressed: {
                                 root.wifiSelectedSsid = modelData.ssid
+                                root.wifiSelectedSecurity = modelData.security || ""
                                 root.wifiPassword = ""
-                                root.wifiMode = "dhcp"
+                                if (typeof wifiPwInput !== "undefined") wifiPwInput.text = ""
                             }
                         }
                     }
                 }
             }
 
-            // Formulaire de connexion (après sélection SSID)
+            // ── Formulaire connexion (sous la liste, toujours visible) ──────
+            Flickable {
+                anchors { top: wifiListBox.bottom; left: parent.left; right: parent.right; bottom: connectBtn.top
+                          topMargin: 12; bottomMargin: 8 }
+                contentHeight: wifiForm.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                Column {
+                    id: wifiForm
+                    width: parent.width
+                    spacing: 8
+                    opacity: root.wifiSelectedSsid === "" ? 0.5 : 1
+
+                    Row {
+                        spacing: 8
+                        Text {
+                            text: root.wifiSelectedSsid === "" ? "Sélectionnez un réseau" : "Connexion à "
+                            color: "#94a3b8"; font.pixelSize: 11
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            visible: root.wifiSelectedSsid !== ""
+                            text: root.wifiSelectedSsid
+                            color: "white"; font.pixelSize: 12; font.weight: Font.Bold
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    Text { text: "Mot de passe"; color: "#cbd5e1"; font.pixelSize: 10 }
+                    KbInput {
+                        id: wifiPwInput
+                        width: parent.width
+                        keyboard: root.keyboard
+                        isPassword: true
+                        placeholder: "••••••••"
+                        onTextChanged: root.wifiPassword = text
+                    }
+
+                    Text { text: "Attribution IP"; color: "#cbd5e1"; font.pixelSize: 10 }
+                    Row {
+                        spacing: 6
+                        Repeater {
+                            model: [{id:"dhcp", lbl:"DHCP"}, {id:"static", lbl:"Statique"}]
+                            Rectangle {
+                                width: 88; height: 30; radius: 8
+                                color: root.wifiMode === modelData.id ? "#2563eb" : "#1e293b"
+                                border.color: root.wifiMode === modelData.id ? "#3b82f6" : "#334155"
+                                Text { anchors.centerIn: parent; text: modelData.lbl
+                                       color: root.wifiMode === modelData.id ? "white" : "#94a3b8"
+                                       font.pixelSize: 11; font.weight: Font.DemiBold }
+                                MouseArea { anchors.fill: parent; onPressed: root.wifiMode = modelData.id }
+                            }
+                        }
+                    }
+
+                    Column {
+                        visible: root.wifiMode === "static"
+                        width: parent.width
+                        spacing: 6
+                        Row {
+                            width: parent.width; spacing: 6
+                            Column {
+                                width: (parent.width - 6) / 2; spacing: 3
+                                Text { text: "IP"; color: "#94a3b8"; font.pixelSize: 10 }
+                                KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.50"
+                                          onTextChanged: root.wifiIp = text }
+                            }
+                            Column {
+                                width: (parent.width - 6) / 2; spacing: 3
+                                Text { text: "Préfixe"; color: "#94a3b8"; font.pixelSize: 10 }
+                                KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "24"
+                                          onTextChanged: root.wifiPrefix = text }
+                            }
+                        }
+                        Text { text: "Gateway"; color: "#94a3b8"; font.pixelSize: 10 }
+                        KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.1"
+                                  onTextChanged: root.wifiGw = text }
+                        Text { text: "DNS"; color: "#94a3b8"; font.pixelSize: 10 }
+                        KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "8.8.8.8"
+                                  onTextChanged: root.wifiDns = text }
+                    }
+                }
+            }
+
+            // ── Bouton Connecter (toujours en bas) ──────────────────────────
+            Rectangle {
+                id: connectBtn
+                anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+                height: 42; radius: 10
+                color: (root.wifiSelectedSsid === "" || root.busy) ? "#1e293b" : "#2563eb"
+                opacity: (root.wifiSelectedSsid === "" || root.busy) ? 0.5 : 1
+                Text {
+                    anchors.centerIn: parent
+                    text: root.busy ? "Connexion…" : "Connecter"
+                    color: "white"; font.pixelSize: 13; font.weight: Font.Bold
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: root.wifiSelectedSsid !== "" && !root.busy
+                    onPressed: {
+                        root.errorMsg = ""; root.statusMsg = ""; root.busy = true
+                        if (root.keyboard) root.keyboard.close()
+                        root.controller.connectWifi(
+                            root.wifiSelectedSsid, root.wifiPassword, root.wifiMode,
+                            root.wifiIp, root.wifiPrefix, root.wifiGw, root.wifiDns)
+                    }
+                }
+            }
+        }
+
+        // ═══════════════════════ Onglet ETHERNET ════════════════════════════
+        Flickable {
+            id: ethView
+            visible: root.tab === "ethernet"
+            anchors {
+                top: banners.bottom; left: parent.left; right: parent.right; bottom: footer.top
+                topMargin: 10; leftMargin: 14; rightMargin: 14; bottomMargin: 10
+            }
+            contentHeight: ethForm.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
             Column {
-                visible: root.wifiSelectedSsid !== ""
-                anchors.fill: parent
+                id: ethForm
+                width: parent.width
                 spacing: 10
 
+                Text { text: "Attribution IP"; color: "#cbd5e1"; font.pixelSize: 10 }
                 Row {
-                    spacing: 8
-                    Rectangle {
-                        width: 28; height: 28; radius: 6
-                        color: "#1e293b"
-                        Text { anchors.centerIn: parent; text: "←"; color: "#cbd5e1"; font.pixelSize: 14 }
-                        MouseArea { anchors.fill: parent; onPressed: root.wifiSelectedSsid = "" }
-                    }
-                    Text {
-                        text: root.wifiSelectedSsid; color: "white"; font.pixelSize: 14; font.weight: Font.Bold
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-
-                Text { text: "Mot de passe"; color: "#cbd5e1"; font.pixelSize: 11 }
-                KbInput {
-                    id: wifiPwInput
-                    width: parent.width
-                    keyboard: root.keyboard
-                    isPassword: true
-                    placeholder: "••••••••"
-                    onTextChanged: root.wifiPassword = text
-                }
-
-                Text { text: "Mode"; color: "#cbd5e1"; font.pixelSize: 11 }
-                Row {
-                    spacing: 8
+                    spacing: 6
                     Repeater {
                         model: [{id:"dhcp", lbl:"DHCP"}, {id:"static", lbl:"Statique"}]
                         Rectangle {
-                            width: 100; height: 32; radius: 8
-                            color: root.wifiMode === modelData.id ? "#2563eb" : "#1e293b"
-                            border.color: root.wifiMode === modelData.id ? "#3b82f6" : "#334155"
-                            Text {
-                                anchors.centerIn: parent; text: modelData.lbl
-                                color: root.wifiMode === modelData.id ? "white" : "#94a3b8"
-                                font.pixelSize: 11; font.weight: Font.DemiBold
-                            }
-                            MouseArea { anchors.fill: parent; onPressed: root.wifiMode = modelData.id }
+                            width: 100; height: 30; radius: 8
+                            color: root.ethMode === modelData.id ? "#2563eb" : "#1e293b"
+                            border.color: root.ethMode === modelData.id ? "#3b82f6" : "#334155"
+                            Text { anchors.centerIn: parent; text: modelData.lbl
+                                   color: root.ethMode === modelData.id ? "white" : "#94a3b8"
+                                   font.pixelSize: 11; font.weight: Font.DemiBold }
+                            MouseArea { anchors.fill: parent; onPressed: root.ethMode = modelData.id }
                         }
                     }
                 }
 
-                // Champs statiques
                 Column {
-                    visible: root.wifiMode === "static"
+                    visible: root.ethMode === "static"
                     width: parent.width
-                    spacing: 6
-                    Text { text: "IP"; color: "#cbd5e1"; font.pixelSize: 10 }
-                    KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.50"
-                              onTextChanged: root.wifiIp = text }
-                    Text { text: "Préfixe"; color: "#cbd5e1"; font.pixelSize: 10 }
-                    KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "24"
-                              onTextChanged: root.wifiPrefix = text }
-                    Text { text: "Gateway"; color: "#cbd5e1"; font.pixelSize: 10 }
-                    KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.1"
-                              onTextChanged: root.wifiGw = text }
-                    Text { text: "DNS"; color: "#cbd5e1"; font.pixelSize: 10 }
+                    spacing: 8
+                    Row {
+                        width: parent.width; spacing: 6
+                        Column {
+                            width: (parent.width - 6) / 2; spacing: 3
+                            Text { text: "IP"; color: "#94a3b8"; font.pixelSize: 10 }
+                            KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.10.132"
+                                      onTextChanged: root.ethIp = text }
+                        }
+                        Column {
+                            width: (parent.width - 6) / 2; spacing: 3
+                            Text { text: "Préfixe"; color: "#94a3b8"; font.pixelSize: 10 }
+                            KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "24"
+                                      onTextChanged: root.ethPrefix = text }
+                        }
+                    }
+                    Text { text: "Gateway"; color: "#94a3b8"; font.pixelSize: 10 }
+                    KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.10.1"
+                              onTextChanged: root.ethGw = text }
+                    Text { text: "DNS"; color: "#94a3b8"; font.pixelSize: 10 }
                     KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "8.8.8.8"
-                              onTextChanged: root.wifiDns = text }
+                              onTextChanged: root.ethDns = text }
                 }
 
+                Item { width: 1; height: 6 }
+
                 Rectangle {
-                    width: parent.width; height: 40; radius: 10
+                    width: parent.width; height: 42; radius: 10
                     color: root.busy ? "#1e293b" : "#2563eb"
                     opacity: root.busy ? 0.5 : 1
                     Text {
                         anchors.centerIn: parent
-                        text: root.busy ? "Connexion…" : "Connecter"
-                        color: "white"; font.pixelSize: 12; font.weight: Font.Bold
+                        text: root.busy ? "Application…" : "Appliquer"
+                        color: "white"; font.pixelSize: 13; font.weight: Font.Bold
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -449,104 +608,46 @@ Rectangle {
                         onPressed: {
                             root.errorMsg = ""; root.statusMsg = ""; root.busy = true
                             if (root.keyboard) root.keyboard.close()
-                            root.controller.connectWifi(
-                                root.wifiSelectedSsid, root.wifiPassword, root.wifiMode,
-                                root.wifiIp, root.wifiPrefix, root.wifiGw, root.wifiDns)
+                            root.controller.setEthernet(
+                                root.ethMode, root.ethIp, root.ethPrefix, root.ethGw, root.ethDns)
                         }
                     }
                 }
             }
         }
 
-        // ─────────── Onglet ETHERNET ────────────────────────────────────────
-        Column {
-            visible: root.tab === "ethernet"
-            anchors {
-                top: banners.bottom; left: parent.left; right: parent.right; bottom: footer.top
-                topMargin: 10; leftMargin: 14; rightMargin: 14; bottomMargin: 8
-            }
-            spacing: 10
-
-            Text { text: "Mode"; color: "#cbd5e1"; font.pixelSize: 11 }
-            Row {
-                spacing: 8
-                Repeater {
-                    model: [{id:"dhcp", lbl:"DHCP"}, {id:"static", lbl:"Statique"}]
-                    Rectangle {
-                        width: 100; height: 32; radius: 8
-                        color: root.ethMode === modelData.id ? "#2563eb" : "#1e293b"
-                        border.color: root.ethMode === modelData.id ? "#3b82f6" : "#334155"
-                        Text {
-                            anchors.centerIn: parent; text: modelData.lbl
-                            color: root.ethMode === modelData.id ? "white" : "#94a3b8"
-                            font.pixelSize: 11; font.weight: Font.DemiBold
-                        }
-                        MouseArea { anchors.fill: parent; onPressed: root.ethMode = modelData.id }
-                    }
-                }
-            }
-
-            Column {
-                visible: root.ethMode === "static"
-                width: parent.width
-                spacing: 6
-                Text { text: "IP"; color: "#cbd5e1"; font.pixelSize: 10 }
-                KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.10.132"
-                          onTextChanged: root.ethIp = text }
-                Text { text: "Préfixe"; color: "#cbd5e1"; font.pixelSize: 10 }
-                KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "24"
-                          onTextChanged: root.ethPrefix = text }
-                Text { text: "Gateway"; color: "#cbd5e1"; font.pixelSize: 10 }
-                KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.10.1"
-                          onTextChanged: root.ethGw = text }
-                Text { text: "DNS"; color: "#cbd5e1"; font.pixelSize: 10 }
-                KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "8.8.8.8"
-                          onTextChanged: root.ethDns = text }
-            }
-
-            Item { width: 1; height: 6 }
-
-            Rectangle {
-                width: parent.width; height: 40; radius: 10
-                color: root.busy ? "#1e293b" : "#2563eb"
-                opacity: root.busy ? 0.5 : 1
-                Text {
-                    anchors.centerIn: parent
-                    text: root.busy ? "Application…" : "Appliquer"
-                    color: "white"; font.pixelSize: 12; font.weight: Font.Bold
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: !root.busy
-                    onPressed: {
-                        root.errorMsg = ""; root.statusMsg = ""; root.busy = true
-                        if (root.keyboard) root.keyboard.close()
-                        root.controller.setEthernet(
-                            root.ethMode, root.ethIp, root.ethPrefix, root.ethGw, root.ethDns)
-                    }
-                }
-            }
-        }
-
-        // Footer
+        // ─── Footer ─────────────────────────────────────────────────────────
         Rectangle {
             id: footer
             anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
             height: 52
             color: "transparent"
 
-            Rectangle {
-                anchors { top: parent.top; left: parent.left; right: parent.right }
-                height: 1; color: "#1e293b"
-            }
+            Rectangle { anchors { top: parent.top; left: parent.left; right: parent.right }
+                        height: 1; color: "#1e293b" }
 
             Rectangle {
                 anchors.centerIn: parent
-                width: 120; height: 36; radius: 10
+                width: 140; height: 34; radius: 10
                 color: "#1e293b"; border.color: "#475569"
-                Text { anchors.centerIn: parent; text: "Fermer"; color: "#94a3b8"; font.pixelSize: 12 }
+                Text { anchors.centerIn: parent; text: "Fermer"; color: "#cbd5e1"; font.pixelSize: 12 }
                 MouseArea { anchors.fill: parent; onPressed: root.close() }
             }
+        }
+    }
+
+    // ─── Composant inline pour les lignes clé: valeur dans l'onglet Infos ──
+    component KvRow: Row {
+        property string k: ""
+        property string v: ""
+        property bool dim: false
+        spacing: 8
+        Text { text: parent.k; color: "#64748b"; font.pixelSize: 11; width: 90 }
+        Text {
+            text: parent.v
+            color: parent.dim ? "#94a3b8" : "#cbd5e1"
+            font.pixelSize: 11
+            font.family: parent.dim ? "monospace" : "sans-serif"
         }
     }
 }
