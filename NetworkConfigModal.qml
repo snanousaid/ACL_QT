@@ -636,18 +636,4 @@ Rectangle {
         }
     }
 
-    // ─── Composant inline pour les lignes clé: valeur dans l'onglet Infos ──
-    component KvRow: Row {
-        property string k: ""
-        property string v: ""
-        property bool dim: false
-        spacing: 8
-        Text { text: parent.k; color: "#64748b"; font.pixelSize: 11; width: 90 }
-        Text {
-            text: parent.v
-            color: parent.dim ? "#94a3b8" : "#cbd5e1"
-            font.pixelSize: 11
-            font.family: parent.dim ? "monospace" : "sans-serif"
-        }
-    }
 }

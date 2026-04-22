@@ -10,5 +10,6 @@
         <file>FaceSettingsModal.qml</file>
         <file>EnrollmentModal.qml</file>
         <file>NetworkConfigModal.qml</file>
+        <file>KvRow.qml</file>
     </qresource>
 </RCC>
