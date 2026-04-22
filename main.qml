@@ -283,6 +283,10 @@ Window {
         }
 
         // ── Virtual keyboard (shared, z:60) ───────────────────────────────────
-        VirtualKeyboard { id: keyboard }
+        VirtualKeyboard {
+            id: keyboard
+            // TEST: affiche le clavier automatiquement au démarrage
+            Component.onCompleted: keyboard.open("test", false, function(v) { console.log("KB value:", v) })
+        }
     }
 }

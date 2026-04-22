@@ -70,7 +70,7 @@ Rectangle {
     }
 
     // ── Backdrop (tap outside → confirm) ─────────────────────────────────────
-    MouseArea { anchors.fill: parent; onClicked: _confirm() }
+    MouseArea { anchors.fill: parent; onPressed: _confirm() }
 
     // ── Preview bar ───────────────────────────────────────────────────────────
     Rectangle {
@@ -106,14 +106,14 @@ Rectangle {
                 width: 68; height: 32; radius: 6; color: "#334155"
                 anchors.verticalCenter: parent.verticalCenter
                 Text { anchors.centerIn: parent; text: "Effacer"; color: "#94a3b8"; font.pixelSize: 12 }
-                MouseArea { anchors.fill: parent; onClicked: root.kbValue = "" }
+                MouseArea { anchors.fill: parent; onPressed: root.kbValue = "" }
             }
 
             Rectangle {
                 width: 68; height: 32; radius: 6; color: "#16a34a"
                 anchors.verticalCenter: parent.verticalCenter
                 Text { anchors.centerIn: parent; text: "OK"; color: "white"; font.pixelSize: 12; font.weight: Font.Bold }
-                MouseArea { anchors.fill: parent; onClicked: root._confirm() }
+                MouseArea { anchors.fill: parent; onPressed: root._confirm() }
             }
         }
     }
@@ -160,9 +160,8 @@ Rectangle {
                         }
                         MouseArea {
                             anchors.fill: parent
-                            onPressed:  parent.dn = true
+                            onPressed:  { root.handleKey(modelData.k); parent.dn = true }
                             onReleased: parent.dn = false
-                            onClicked:  root.handleKey(modelData.k)
                         }
                     }
                 }
@@ -193,9 +192,8 @@ Rectangle {
                         }
                         MouseArea {
                             anchors.fill: parent
-                            onPressed:  parent.dn = true
+                            onPressed:  { root.handleKey(modelData.k); parent.dn = true }
                             onReleased: parent.dn = false
-                            onClicked:  root.handleKey(modelData.k)
                         }
                     }
                 }
@@ -226,9 +224,8 @@ Rectangle {
                         }
                         MouseArea {
                             anchors.fill: parent
-                            onPressed:  parent.dn = true
+                            onPressed:  { root.handleKey(modelData.k); parent.dn = true }
                             onReleased: parent.dn = false
-                            onClicked:  root.handleKey(modelData.k)
                         }
                     }
                 }
@@ -259,9 +256,8 @@ Rectangle {
                         }
                         MouseArea {
                             anchors.fill: parent
-                            onPressed:  parent.dn = true
+                            onPressed:  { root.handleKey(modelData.k); parent.dn = true }
                             onReleased: parent.dn = false
-                            onClicked:  root.handleKey(modelData.k)
                         }
                     }
                 }
