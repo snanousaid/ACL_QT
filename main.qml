@@ -28,29 +28,12 @@ Window {
 
     property bool adminVisible: false
 
-    // ── Double-tap au niveau Window (hors rotation — fonctionne VM et device) ─
-    property int  _tapCount: 0
+    // Compteur de double-tap (le MouseArea est dans rotatedContent — voir ci-dessous)
+    property int _tapCount: 0
     Timer {
         id: doubleTapTimer
         interval: 5000
         onTriggered: root._tapCount = 0
-    }
-    MouseArea {
-        anchors.fill: parent
-        z: 1
-        propagateComposedEvents: true
-        onPressed: {
-            root._tapCount++
-            if (root._tapCount >= 2) {
-                root._tapCount = 0
-                doubleTapTimer.stop()
-                settingsBtn.visible = true
-                settingsHideTimer.restart()
-            } else {
-                doubleTapTimer.restart()
-            }
-            mouse.accepted = false   // laisse les events passer aux items en dessous
-        }
     }
 
     // ── Rotation container ───────────────────────────────────────────────────
@@ -63,6 +46,25 @@ Window {
         width:  600
         height: 1024
         rotation: 90
+
+        // Détecteur de double-tap — DANS rotatedContent pour partager le même
+        // système de coordonnées que les boutons. z:-1 → derrière toute l'UI,
+        // ne capte un tap que si aucun bouton ne l'a accepté.
+        MouseArea {
+            anchors.fill: parent
+            z: -1
+            onPressed: {
+                root._tapCount++
+                if (root._tapCount >= 2) {
+                    root._tapCount = 0
+                    doubleTapTimer.stop()
+                    settingsBtn.visible = true
+                    settingsHideTimer.restart()
+                } else {
+                    doubleTapTimer.restart()
+                }
+            }
+        }
 
         // ── Header ───────────────────────────────────────────────────────────
         Rectangle {
