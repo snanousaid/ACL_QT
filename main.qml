@@ -37,7 +37,7 @@ Window {
         anchors.centerIn: parent
         width:  600
         height: 1024
-        rotation: -90
+        rotation: 90
 
         // ── Header ───────────────────────────────────────────────────────────
         Rectangle {
