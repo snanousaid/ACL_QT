@@ -2,10 +2,24 @@
 #include <QNetworkRequest>
 #include <QDateTime>
 #include <QTime>
+#include <QProcessEnvironment>
 
 AppController::AppController(QObject *parent)
     : QObject(parent)
 {
+    // Allow overriding URLs via env vars for deployment flexibility
+    auto env = QProcessEnvironment::systemEnvironment();
+    if (env.contains(QStringLiteral("ACL_BADGE_URL")))
+        m_badgeSocketUrl = env.value(QStringLiteral("ACL_BADGE_URL"));
+    if (env.contains(QStringLiteral("ACL_FACE_SOCKET_URL")))
+        m_faceSocketUrl = env.value(QStringLiteral("ACL_FACE_SOCKET_URL"));
+    if (env.contains(QStringLiteral("ACL_FACE_API_URL")))
+        m_faceApiUrl = env.value(QStringLiteral("ACL_FACE_API_URL"));
+
+    qDebug() << "Badge socket:" << m_badgeSocketUrl;
+    qDebug() << "Face  socket:" << m_faceSocketUrl;
+    qDebug() << "MJPEG stream:" << m_mjpegUrl;
+
     m_nam = new QNetworkAccessManager(this);
 
     m_badgeSocket = new SocketIoClient(m_badgeSocketUrl, this);

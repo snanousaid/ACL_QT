@@ -35,10 +35,10 @@ private slots:
 private:
     void handleEvent(const QJsonObject &data, const QString &source);
 
-    const QString m_badgeSocketUrl = QStringLiteral("http://192.168.10.132:5000");
-    const QString m_faceSocketUrl  = QStringLiteral("http://localhost:5001");
-    const QString m_faceApiUrl     = QStringLiteral("http://localhost:5050");
-    const QString m_mjpegUrl       = QStringLiteral("http://localhost:5050/video_feed");
+    QString m_badgeSocketUrl = QStringLiteral("http://192.168.10.132:5000");
+    QString m_faceSocketUrl  = QStringLiteral("http://localhost:5001");
+    QString m_faceApiUrl     = QStringLiteral("http://localhost:5050");
+    QString m_mjpegUrl       = QStringLiteral("http://localhost:5050/video_feed");
 
     bool m_badgeConnected = false;
     bool m_faceConnected  = false;
