@@ -6,6 +6,9 @@
 
 int main(int argc, char *argv[])
 {
+    // Force rotation before display init — env var in shell profile not always picked up
+    qputenv("QT_QPA_EGLFS_ROTATION", "90");
+
 #if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 #endif
