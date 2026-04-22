@@ -28,6 +28,31 @@ Window {
 
     property bool adminVisible: false
 
+    // ── Double-tap au niveau Window (hors rotation — fonctionne VM et device) ─
+    property int  _tapCount: 0
+    Timer {
+        id: doubleTapTimer
+        interval: 400
+        onTriggered: root._tapCount = 0
+    }
+    MouseArea {
+        anchors.fill: parent
+        z: 1
+        propagateComposedEvents: true
+        onPressed: {
+            root._tapCount++
+            if (root._tapCount >= 2) {
+                root._tapCount = 0
+                doubleTapTimer.stop()
+                settingsBtn.visible = true
+                settingsHideTimer.restart()
+            } else {
+                doubleTapTimer.restart()
+            }
+            mouse.accepted = false   // laisse les events passer aux items en dessous
+        }
+    }
+
     // ── Rotation container ───────────────────────────────────────────────────
     // Portrait content (600×1024) rotated -90° (CCW) to fill landscape screen.
     // anchors.centerIn places the geometry center at the window center;
@@ -110,30 +135,6 @@ Window {
             visible: false
             z: 20
             onDismissed: visible = false
-        }
-
-        // ── Settings icon (double-tap) ───────────────────────────────────────
-        // onDoubleClicked ne fonctionne pas sans release event — implémentation manuelle.
-        MouseArea {
-            anchors.fill: parent
-            z: 5
-            property int tapCount: 0
-            Timer {
-                id: doubleTapTimer
-                interval: 400
-                onTriggered: parent.tapCount = 0
-            }
-            onPressed: {
-                tapCount++
-                if (tapCount >= 2) {
-                    tapCount = 0
-                    doubleTapTimer.stop()
-                    settingsBtn.visible = true
-                    settingsHideTimer.restart()
-                } else {
-                    doubleTapTimer.restart()
-                }
-            }
         }
 
         Timer {
