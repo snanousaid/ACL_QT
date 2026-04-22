@@ -2,7 +2,7 @@ import QtQuick 2.10
 
 Rectangle {
     id: root
-    height: 36
+    height: 48
     color: "#0d1421"
 
     property bool badgeConnected: false
@@ -16,78 +16,150 @@ Rectangle {
     }
 
     Row {
-        anchors.centerIn: parent
-        spacing: 20
+        anchors.fill: parent
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
 
-        // Badge status
+        // ── Left: Badge + Caméra ─────────────────────────────────────────
         Row {
-            spacing: 6
             anchors.verticalCenter: parent.verticalCenter
+            spacing: 16
 
+            // Badge
             Rectangle {
-                width: 7; height: 7; radius: 4
+                width: badgeRow.implicitWidth + 20
+                height: 28; radius: 6
+                color: "#0f172a"
+                border.color: "#1e293b"
                 anchors.verticalCenter: parent.verticalCenter
-                color: root.badgeConnected ? "#10b981" : "#ef4444"
 
-                SequentialAnimation on opacity {
-                    running: root.badgeConnected
-                    loops: Animation.Infinite
-                    NumberAnimation { from: 1; to: 0.3; duration: 800 }
-                    NumberAnimation { from: 0.3; to: 1; duration: 800 }
+                Row {
+                    id: badgeRow
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    Text {
+                        text: "⊡"
+                        color: "#64748b"
+                        font.pixelSize: 13
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: "BADGE"
+                        color: "#94a3b8"
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
+                        font.letterSpacing: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Rectangle {
+                        width: 7; height: 7; radius: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: root.badgeConnected ? "#22c55e" : "#ef4444"
+
+                        SequentialAnimation on opacity {
+                            running: root.badgeConnected
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 1; to: 0.3; duration: 800 }
+                            NumberAnimation { from: 0.3; to: 1; duration: 800 }
+                        }
+                    }
+                    Text {
+                        text: root.badgeConnected ? "ACTIF" : "INACTIF"
+                        color: root.badgeConnected ? "#22c55e" : "#ef4444"
+                        font.pixelSize: 11
+                        font.weight: Font.Bold
+                        font.letterSpacing: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
             }
 
-            Text {
-                text: "Badge"
-                color: root.badgeConnected ? "#94a3b8" : "#64748b"
-                font.pixelSize: 11
-                font.letterSpacing: 1
-                anchors.verticalCenter: parent.verticalCenter
-            }
-        }
-
-        Rectangle { width: 1; height: 14; color: "#334155"; anchors.verticalCenter: parent.verticalCenter }
-
-        // Face status
-        Row {
-            spacing: 6
-            anchors.verticalCenter: parent.verticalCenter
-
+            // Caméra
             Rectangle {
-                width: 7; height: 7; radius: 4
+                width: camRow.implicitWidth + 20
+                height: 28; radius: 6
+                color: "#0f172a"
+                border.color: "#1e293b"
                 anchors.verticalCenter: parent.verticalCenter
-                color: root.faceConnected ? "#10b981" : "#ef4444"
 
-                SequentialAnimation on opacity {
-                    running: root.faceConnected
-                    loops: Animation.Infinite
-                    NumberAnimation { from: 1; to: 0.3; duration: 800 }
-                    NumberAnimation { from: 0.3; to: 1; duration: 800 }
+                Row {
+                    id: camRow
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    Text {
+                        text: "◉"
+                        color: "#64748b"
+                        font.pixelSize: 13
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: "CAMÉRA"
+                        color: "#94a3b8"
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
+                        font.letterSpacing: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Rectangle {
+                        width: 7; height: 7; radius: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: root.faceConnected ? "#22c55e" : "#ef4444"
+
+                        SequentialAnimation on opacity {
+                            running: root.faceConnected
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 1; to: 0.3; duration: 800 }
+                            NumberAnimation { from: 0.3; to: 1; duration: 800 }
+                        }
+                    }
+                    Text {
+                        text: root.faceConnected ? "ACTIF" : "INACTIF"
+                        color: root.faceConnected ? "#22c55e" : "#ef4444"
+                        font.pixelSize: 11
+                        font.weight: Font.Bold
+                        font.letterSpacing: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
             }
-
-            Text {
-                text: "Face ID"
-                color: root.faceConnected ? "#94a3b8" : "#64748b"
-                font.pixelSize: 11
-                font.letterSpacing: 1
-                anchors.verticalCenter: parent.verticalCenter
-            }
         }
 
-        Rectangle { width: 1; height: 14; color: "#334155"; anchors.verticalCenter: parent.verticalCenter }
+        // Spacer
+        Item { Layout.fillWidth: true; width: 1 }
 
-        // Clock
-        Text {
-            id: clock
-            color: "#475569"
-            font.pixelSize: 11
-            font.family: "monospace"
+        // ── Right: date + time ────────────────────────────────────────────
+        Row {
             anchors.verticalCenter: parent.verticalCenter
+            anchors.right: parent.right
+            spacing: 12
+
+            Text {
+                id: dateText
+                color: "#475569"
+                font.pixelSize: 12
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Rectangle { width: 1; height: 18; color: "#1e293b"; anchors.verticalCenter: parent.verticalCenter }
+
+            Text {
+                id: timeText
+                color: "#94a3b8"
+                font.pixelSize: 18
+                font.weight: Font.Medium
+                font.family: "monospace"
+                anchors.verticalCenter: parent.verticalCenter
+            }
 
             Timer {
                 interval: 1000; running: true; repeat: true; triggeredOnStart: true
-                onTriggered: clock.text = Qt.formatTime(new Date(), "hh:mm:ss")
+                onTriggered: {
+                    var now = new Date()
+                    timeText.text = Qt.formatTime(now, "hh:mm:ss")
+                    dateText.text = Qt.formatDate(now, "dd MMM yyyy")
+                }
             }
         }
     }
