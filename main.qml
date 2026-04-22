@@ -112,14 +112,28 @@ Window {
             onDismissed: visible = false
         }
 
-        // ── Settings icon (double-click) ──────────────────────────────────────
+        // ── Settings icon (double-tap) ───────────────────────────────────────
+        // onDoubleClicked ne fonctionne pas sans release event — implémentation manuelle.
         MouseArea {
             anchors.fill: parent
-            onDoubleClicked: {
-                settingsBtn.visible = true
-                settingsHideTimer.restart()
-            }
             z: 5
+            property int tapCount: 0
+            Timer {
+                id: doubleTapTimer
+                interval: 400
+                onTriggered: parent.tapCount = 0
+            }
+            onPressed: {
+                tapCount++
+                if (tapCount >= 2) {
+                    tapCount = 0
+                    doubleTapTimer.stop()
+                    settingsBtn.visible = true
+                    settingsHideTimer.restart()
+                } else {
+                    doubleTapTimer.restart()
+                }
+            }
         }
 
         Timer {
@@ -283,10 +297,6 @@ Window {
         }
 
         // ── Virtual keyboard (shared, z:60) ───────────────────────────────────
-        VirtualKeyboard {
-            id: keyboard
-            // TEST: affiche le clavier automatiquement au démarrage
-            Component.onCompleted: keyboard.open("test", false, function(v) { console.log("KB value:", v) })
-        }
+        VirtualKeyboard { id: keyboard }
     }
 }
