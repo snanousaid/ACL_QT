@@ -26,6 +26,13 @@ public:
     Q_INVOKABLE void toggleFaceUser(const QString &name);
     Q_INVOKABLE void deleteFaceUser(const QString &name);
 
+    // ── Enrôlement live ─────────────────────────────────────────────────────
+    Q_INVOKABLE void startEnroll(const QString &name, const QString &role,
+                                 int samplesPerPose);
+    Q_INVOKABLE void finalizeEnroll();
+    Q_INVOKABLE void cancelEnroll();
+    Q_INVOKABLE void pollEnrollStatus();
+
 signals:
     void badgeConnectedChanged();
     void faceConnectedChanged();
@@ -37,6 +44,10 @@ signals:
     void faceApiError(const QString &op, const QString &msg);
     // Mutation réussie (toggle/delete) → la modal recharge la liste.
     void faceUserMutated(const QString &op, const QString &name);
+    // Statut de l'enrôlement (poll), payload = QVariantMap aplati de status.json.
+    void enrollStatus(const QVariantMap &status);
+    // Réponse start/finalize/cancel : ok + msg backend.
+    void enrollResult(const QString &op, bool ok, const QString &msg);
 
 private slots:
     void onBadgeEvent(const QString &evName, const QJsonObject &data);

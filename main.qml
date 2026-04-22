@@ -312,6 +312,15 @@ Window {
             controller: controller
             // Re-ouvre l'admin menu en sortant (admin reste pausée)
             onClosed: adminMenu.open()
+            onOpenEnroll: { faceSettings.visible = false; enrollment.open() }
+        }
+
+        // ── Enrolment modal (sous-modal de FaceSettings) ─────────────────────
+        EnrollmentModal {
+            id: enrollment
+            controller: controller
+            keyboard: keyboard
+            onClosed: { faceSettings.open() }   // retour à la liste
         }
 
         // ── Virtual keyboard (shared, z:60) ───────────────────────────────────

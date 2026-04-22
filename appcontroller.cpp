@@ -3,6 +3,8 @@
 #include <QNetworkReply>
 #include <QJsonDocument>
 #include <QJsonArray>
+#include <QHttpMultiPart>
+#include <QUrlQuery>
 #include <QDateTime>
 #include <QTime>
 #include <QUrl>
@@ -149,5 +151,91 @@ void AppController::deleteFaceUser(const QString &name)
             return;
         }
         emit faceUserMutated(QStringLiteral("delete"), name);
+    });
+}
+
+// ── Enrôlement live ────────────────────────────────────────────────────────
+static QByteArray formEncode(const QList<QPair<QString, QString>> &pairs)
+{
+    QUrlQuery q;
+    for (const auto &p : pairs) q.addQueryItem(p.first, p.second);
+    return q.toString(QUrl::FullyEncoded).toUtf8();
+}
+
+static void parseOkMsg(QNetworkReply *reply, bool *ok, QString *msg)
+{
+    *ok = false;
+    *msg = QString();
+    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+    if (doc.isObject()) {
+        const QJsonObject o = doc.object();
+        *ok  = o.value(QStringLiteral("ok")).toBool();
+        *msg = o.value(QStringLiteral("msg")).toString();
+    }
+}
+
+void AppController::startEnroll(const QString &name, const QString &role, int samplesPerPose)
+{
+    QNetworkRequest req(QUrl(m_faceApiUrl + QStringLiteral("/enroll_live/start")));
+    req.setHeader(QNetworkRequest::ContentTypeHeader,
+                  QStringLiteral("application/x-www-form-urlencoded"));
+    const QByteArray body = formEncode({
+        {QStringLiteral("name"), name},
+        {QStringLiteral("role"), role},
+        {QStringLiteral("samples_per_pose"), QString::number(samplesPerPose)},
+    });
+    QNetworkReply *reply = m_nam->post(req, body);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit enrollResult(QStringLiteral("start"), false, reply->errorString());
+            return;
+        }
+        bool ok; QString msg;
+        parseOkMsg(reply, &ok, &msg);
+        emit enrollResult(QStringLiteral("start"), ok, msg);
+    });
+}
+
+void AppController::finalizeEnroll()
+{
+    QNetworkRequest req(QUrl(m_faceApiUrl + QStringLiteral("/enroll_live/finalize")));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    QNetworkReply *reply = m_nam->post(req, QByteArray());
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit enrollResult(QStringLiteral("finalize"), false, reply->errorString());
+            return;
+        }
+        bool ok; QString msg;
+        parseOkMsg(reply, &ok, &msg);
+        emit enrollResult(QStringLiteral("finalize"), ok, msg);
+    });
+}
+
+void AppController::cancelEnroll()
+{
+    QNetworkRequest req(QUrl(m_faceApiUrl + QStringLiteral("/enroll_live/cancel")));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    QNetworkReply *reply = m_nam->post(req, QByteArray());
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        reply->deleteLater();
+        bool ok = (reply->error() == QNetworkReply::NoError);
+        QString msg = ok ? QStringLiteral("annulé") : reply->errorString();
+        emit enrollResult(QStringLiteral("cancel"), ok, msg);
+    });
+}
+
+void AppController::pollEnrollStatus()
+{
+    QNetworkRequest req(QUrl(m_faceApiUrl + QStringLiteral("/status.json")));
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) return;  // silent — poll récurrent
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (doc.isObject())
+            emit enrollStatus(doc.object().toVariantMap());
     });
 }

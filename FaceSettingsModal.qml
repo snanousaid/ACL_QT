@@ -13,6 +13,7 @@ Rectangle {
     property string busyName: ""   // nom en cours d'opération (toggle/delete) → spinner / disable
 
     signal closed()
+    signal openEnroll()
 
     function open() {
         visible = true
@@ -221,7 +222,14 @@ Rectangle {
                 spacing: 8
 
                 Rectangle {
-                    width: 140; height: 36; radius: 8
+                    width: 110; height: 36; radius: 8
+                    color: "#16a34a"; border.color: "#22c55e"
+                    Text { anchors.centerIn: parent; text: "+ Nouveau"; color: "white"; font.pixelSize: 12; font.weight: Font.Bold }
+                    MouseArea { anchors.fill: parent; onPressed: root.openEnroll() }
+                }
+
+                Rectangle {
+                    width: 100; height: 36; radius: 8
                     color: "#1e293b"; border.color: "#334155"
                     Text { anchors.centerIn: parent; text: "Rafraîchir"; color: "#cbd5e1"; font.pixelSize: 12 }
                     MouseArea {
@@ -231,7 +239,7 @@ Rectangle {
                 }
 
                 Rectangle {
-                    width: 140; height: 36; radius: 8
+                    width: 90; height: 36; radius: 8
                     color: "#1e293b"; border.color: "#475569"
                     Text { anchors.centerIn: parent; text: "Fermer"; color: "#94a3b8"; font.pixelSize: 12 }
                     MouseArea { anchors.fill: parent; onPressed: root.close() }

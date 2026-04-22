@@ -8,5 +8,6 @@
         <file>KbInput.qml</file>
         <file>AdminMenu.qml</file>
         <file>FaceSettingsModal.qml</file>
+        <file>EnrollmentModal.qml</file>
     </qresource>
 </RCC>
