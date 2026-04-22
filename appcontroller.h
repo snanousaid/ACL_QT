@@ -33,6 +33,19 @@ public:
     Q_INVOKABLE void cancelEnroll();
     Q_INVOKABLE void pollEnrollStatus();
 
+    // ── Config réseau (REST → m_controllerUrl) ──────────────────────────────
+    Q_INVOKABLE void getNetworkInfo();
+    Q_INVOKABLE void scanWifi();
+    // wifi : si mode="dhcp" ignore ip/prefix/gateway/dns
+    Q_INVOKABLE void connectWifi(const QString &ssid, const QString &password,
+                                 const QString &mode,
+                                 const QString &ip, const QString &prefix,
+                                 const QString &gateway, const QString &dns);
+    // ethernet : si mode="dhcp" ignore ip/prefix/gateway/dns
+    Q_INVOKABLE void setEthernet(const QString &mode,
+                                 const QString &ip, const QString &prefix,
+                                 const QString &gateway, const QString &dns);
+
 signals:
     void badgeConnectedChanged();
     void faceConnectedChanged();
@@ -48,6 +61,14 @@ signals:
     void enrollStatus(const QVariantMap &status);
     // Réponse start/finalize/cancel : ok + msg backend.
     void enrollResult(const QString &op, bool ok, const QString &msg);
+    // Infos réseau : {hostname, wifiIp, wifiMac, wifiSsid, wifiMode, ethIp, ethMac, ethIface, ethMode}
+    void networkInfoLoaded(const QVariantMap &info);
+    // Scan Wi-Fi : QVariantList de {ssid, signal, security}
+    void wifiNetworksLoaded(const QVariantList &networks);
+    // Résultat connexion wifi / ethernet
+    void wifiConnectResult(bool ok, const QString &msg);
+    void ethernetResult(bool ok, const QString &msg);
+    void networkApiError(const QString &op, const QString &msg);
 
 private slots:
     void onBadgeEvent(const QString &evName, const QJsonObject &data);
@@ -61,6 +82,7 @@ private:
     const QString m_faceSocketUrl  = QStringLiteral("http://192.168.10.132:5001");
     const QString m_faceApiUrl     = QStringLiteral("http://192.168.10.132:5050");
     const QString m_mjpegUrl       = QStringLiteral("http://192.168.10.132:5050/video_feed");
+    const QString m_controllerUrl  = QStringLiteral("http://192.168.10.132:80/api/v2");
     // ────────────────────────────────────────────────────────────────────────
 
     bool m_badgeConnected = false;

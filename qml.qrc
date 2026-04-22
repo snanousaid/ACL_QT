@@ -9,5 +9,6 @@
         <file>AdminMenu.qml</file>
         <file>FaceSettingsModal.qml</file>
         <file>EnrollmentModal.qml</file>
+        <file>NetworkConfigModal.qml</file>
     </qresource>
 </RCC>

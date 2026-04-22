@@ -239,3 +239,121 @@ void AppController::pollEnrollStatus()
             emit enrollStatus(doc.object().toVariantMap());
     });
 }
+
+// ── Config réseau ──────────────────────────────────────────────────────────
+void AppController::getNetworkInfo()
+{
+    QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/network/info")));
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit networkApiError(QStringLiteral("info"), reply->errorString());
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (!doc.isObject()) {
+            emit networkApiError(QStringLiteral("info"), QStringLiteral("Réponse invalide"));
+            return;
+        }
+        const QJsonObject o = doc.object();
+        const QJsonObject wifi = o.value(QStringLiteral("wifi")).toObject();
+        const QJsonObject eth  = o.value(QStringLiteral("ethernet")).toObject();
+        QVariantMap info;
+        info[QStringLiteral("hostname")] = o.value(QStringLiteral("hostname")).toString();
+        info[QStringLiteral("wifiIface")]= wifi.value(QStringLiteral("interface")).toString();
+        info[QStringLiteral("wifiIp")]   = wifi.value(QStringLiteral("ip")).toString();
+        info[QStringLiteral("wifiMac")]  = wifi.value(QStringLiteral("mac")).toString();
+        info[QStringLiteral("wifiSsid")] = wifi.value(QStringLiteral("ssid")).toString();
+        info[QStringLiteral("wifiMode")] = wifi.value(QStringLiteral("mode")).toString();
+        info[QStringLiteral("ethIface")] = eth.value(QStringLiteral("interface")).toString();
+        info[QStringLiteral("ethIp")]    = eth.value(QStringLiteral("ip")).toString();
+        info[QStringLiteral("ethMac")]   = eth.value(QStringLiteral("mac")).toString();
+        info[QStringLiteral("ethMode")]  = eth.value(QStringLiteral("mode")).toString();
+        emit networkInfoLoaded(info);
+    });
+}
+
+void AppController::scanWifi()
+{
+    QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/network/scan")));
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit networkApiError(QStringLiteral("scan"), reply->errorString());
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        if (!doc.isArray()) {
+            emit networkApiError(QStringLiteral("scan"), QStringLiteral("Réponse invalide"));
+            return;
+        }
+        QVariantList nets;
+        for (const QJsonValue &v : doc.array())
+            nets.append(v.toObject().toVariantMap());
+        emit wifiNetworksLoaded(nets);
+    });
+}
+
+static QByteArray jsonBody(const QJsonObject &o)
+{
+    return QJsonDocument(o).toJson(QJsonDocument::Compact);
+}
+
+void AppController::connectWifi(const QString &ssid, const QString &password,
+                                const QString &mode,
+                                const QString &ip, const QString &prefix,
+                                const QString &gateway, const QString &dns)
+{
+    QJsonObject body;
+    body[QStringLiteral("ssid")]     = ssid;
+    body[QStringLiteral("password")] = password;
+    if (mode == QStringLiteral("dhcp")) {
+        body[QStringLiteral("dhcp")] = true;
+    } else {
+        body[QStringLiteral("dhcp")]           = false;
+        body[QStringLiteral("staticIp")]       = ip;
+        body[QStringLiteral("mask")]           = prefix.isEmpty() ? QStringLiteral("24") : prefix;
+        body[QStringLiteral("gw")]             = gateway;
+        body[QStringLiteral("dnsPrimaryWifi")] = dns;
+    }
+    QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/network/wifi")));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    QNetworkReply *reply = m_nam->post(req, jsonBody(body));
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit wifiConnectResult(false, reply->errorString());
+            return;
+        }
+        emit wifiConnectResult(true, QStringLiteral("Connecté."));
+    });
+}
+
+void AppController::setEthernet(const QString &mode,
+                                const QString &ip, const QString &prefix,
+                                const QString &gateway, const QString &dns)
+{
+    QJsonObject body;
+    if (mode == QStringLiteral("dhcp")) {
+        body[QStringLiteral("dhcp")] = true;
+    } else {
+        body[QStringLiteral("dhcp")]             = false;
+        body[QStringLiteral("staticIpEthern")]   = ip;
+        body[QStringLiteral("maskEthern")]       = prefix.isEmpty() ? QStringLiteral("24") : prefix;
+        body[QStringLiteral("gwEthern")]         = gateway;
+        body[QStringLiteral("dnsPrimaryEthern")] = dns;
+    }
+    QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/network/ethernet")));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    QNetworkReply *reply = m_nam->post(req, jsonBody(body));
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit ethernetResult(false, reply->errorString());
+            return;
+        }
+        emit ethernetResult(true, QStringLiteral("Configuration appliquée."));
+    });
+}

@@ -302,8 +302,16 @@ Window {
         AdminMenu {
             id: adminMenu
             onClosed:      { root.adminVisible = false; controller.resumeRecognition() }
-            onOpenNetwork: { /* Task 4 – NetworkConfigModal */ }
+            onOpenNetwork: { networkSettings.open() }
             onOpenFace:    { faceSettings.open() }
+        }
+
+        // ── Network config modal ──────────────────────────────────────────────
+        NetworkConfigModal {
+            id: networkSettings
+            controller: controller
+            keyboard: keyboard
+            onClosed: adminMenu.open()
         }
 
         // ── Face settings modal ───────────────────────────────────────────────
