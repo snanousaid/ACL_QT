@@ -55,11 +55,10 @@ Item {
             anchors.centerIn: parent
             spacing: 4
 
-            Image {
+            Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                source: "qrc:/shield.svg"
-                width: 32; height: 32
-                // fallback: colored rectangle if svg missing
+                text: "🛡"
+                font.pixelSize: 32
             }
 
             Text {

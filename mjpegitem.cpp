@@ -53,10 +53,12 @@ void MjpegItem::startStream()
 void MjpegItem::stopStream()
 {
     if (!m_reply) return;
-    m_reply->abort();
-    m_reply->deleteLater();
-    m_reply = nullptr;
+    QNetworkReply *reply = m_reply;
+    m_reply = nullptr;   // null avant abort() pour éviter la ré-entrance
     m_buf.clear();
+    reply->disconnect(); // déconnecte tous les signaux avant abort
+    reply->abort();
+    reply->deleteLater();
 }
 
 void MjpegItem::onReadyRead()
