@@ -4,13 +4,15 @@ import ACL 1.0
 
 Window {
     id: root
-    visible: true
-    width: 600
-    height: 1024
-    title: "ACL Terminal"
+    visibility: Window.FullScreen
+    // Physical screen dimensions (eglfs reports landscape 1024×600).
+    // Content is portrait 600×1024 — rotated -90° (CCW) inside this window.
+    width:  1024
+    height: 600
     color: "#0d1117"
+    title: "ACL Terminal"
 
-    // ── Backend ──────────────────────────────────────────────────────────────
+    // ── Backend (non-visual — lives outside the rotation container) ──────────
     AppControllerType {
         id: controller
         onAccessEvent: {
@@ -26,256 +28,267 @@ Window {
 
     property bool adminVisible: false
 
-    // ── Header ───────────────────────────────────────────────────────────────
-    Rectangle {
-        id: header
-        anchors { top: parent.top; left: parent.left; right: parent.right }
-        height: 60
-        color: "#0d1421"
-        z: 10
+    // ── Rotation container ───────────────────────────────────────────────────
+    // Portrait content (600×1024) rotated -90° (CCW) to fill landscape screen.
+    // anchors.centerIn places the geometry center at the window center;
+    // after -90° rotation the visual bounding box becomes 1024×600, filling the window.
+    Item {
+        id: rotatedContent
+        anchors.centerIn: parent
+        width:  600
+        height: 1024
+        rotation: -90
 
+        // ── Header ───────────────────────────────────────────────────────────
         Rectangle {
-            anchors.bottom: parent.bottom
-            width: parent.width; height: 1
-            color: "#1e293b"
-        }
-
-        Row {
-            anchors { left: parent.left; leftMargin: 24; verticalCenter: parent.verticalCenter }
-            spacing: 10
+            id: header
+            anchors { top: parent.top; left: parent.left; right: parent.right }
+            height: 60
+            color: "#0d1421"
+            z: 10
 
             Rectangle {
-                width: 12; height: 12; radius: 6
-                color: "#3b82f6"
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.bottom: parent.bottom
+                width: parent.width; height: 1
+                color: "#1e293b"
+            }
 
-                SequentialAnimation on opacity {
-                    loops: Animation.Infinite
-                    NumberAnimation { from: 1; to: 0.3; duration: 900 }
-                    NumberAnimation { from: 0.3; to: 1; duration: 900 }
+            Row {
+                anchors { left: parent.left; leftMargin: 24; verticalCenter: parent.verticalCenter }
+                spacing: 10
+
+                Rectangle {
+                    width: 12; height: 12; radius: 6
+                    color: "#3b82f6"
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    SequentialAnimation on opacity {
+                        loops: Animation.Infinite
+                        NumberAnimation { from: 1; to: 0.3; duration: 900 }
+                        NumberAnimation { from: 0.3; to: 1; duration: 900 }
+                    }
+                }
+
+                Text {
+                    text: "<b><font color='#3b82f6'>ACL</font></b><font color='white' style='font-weight:300'> Terminal</font>"
+                    font.pixelSize: 20
+                    font.letterSpacing: 2
+                    textFormat: Text.RichText
+                    anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
             Text {
-                text: "<b><font color='#3b82f6'>ACL</font></b><font color='white' style='font-weight:300'> Terminal</font>"
-                font.pixelSize: 20
+                anchors { right: parent.right; rightMargin: 24; verticalCenter: parent.verticalCenter }
+                text: "Borne d'accès — Entrée Principale"
+                color: "#64748b"
+                font.pixelSize: 11
                 font.letterSpacing: 2
-                textFormat: Text.RichText
-                anchors.verticalCenter: parent.verticalCenter
+                font.capitalization: Font.AllUppercase
             }
         }
 
-        Text {
-            anchors { right: parent.right; rightMargin: 24; verticalCenter: parent.verticalCenter }
-            text: "Borne d'accès — Entrée Principale"
-            color: "#64748b"
-            font.pixelSize: 11
-            font.letterSpacing: 2
-            font.capitalization: Font.AllUppercase
-        }
-    }
-
-    // ── Main area ─────────────────────────────────────────────────────────────
-    IdleScreen {
-        anchors {
-            top: header.bottom
-            left: parent.left; right: parent.right
-            bottom: statusBar.top
-        }
-        mjpegUrl:     controller.mjpegUrl
-        streamPaused: root.adminVisible
-    }
-
-    // ── Access card overlay ───────────────────────────────────────────────────
-    AccessCard {
-        id: accessCard
-        anchors {
-            top: header.bottom
-            left: parent.left; right: parent.right
-            bottom: statusBar.top
-        }
-        visible: false
-        z: 20
-        onDismissed: visible = false
-    }
-
-    // ── Settings icon (double-click) ──────────────────────────────────────────
-    MouseArea {
-        anchors.fill: parent
-        onDoubleClicked: {
-            settingsBtn.visible = true
-            settingsHideTimer.restart()
-        }
-        z: 5
-    }
-
-    Timer {
-        id: settingsHideTimer
-        interval: 6000
-        onTriggered: settingsBtn.visible = false
-    }
-
-    Rectangle {
-        id: settingsBtn
-        visible: false
-        z: 30
-        width: 44; height: 44; radius: 22
-        color: "#cc1e293b"
-        border.color: "#4d64748b"
-        anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 16 }
-
-        Text {
-            anchors.centerIn: parent
-            text: "⚙"
-            color: "#94a3b8"
-            font.pixelSize: 22
+        // ── Main area ─────────────────────────────────────────────────────────
+        IdleScreen {
+            anchors {
+                top: header.bottom
+                left: parent.left; right: parent.right
+                bottom: statusBar.top
+            }
+            mjpegUrl:     controller.mjpegUrl
+            streamPaused: root.adminVisible
         }
 
+        // ── Access card overlay ───────────────────────────────────────────────
+        AccessCard {
+            id: accessCard
+            anchors {
+                top: header.bottom
+                left: parent.left; right: parent.right
+                bottom: statusBar.top
+            }
+            visible: false
+            z: 20
+            onDismissed: visible = false
+        }
+
+        // ── Settings icon (double-click) ──────────────────────────────────────
         MouseArea {
             anchors.fill: parent
-            onClicked: {
-                settingsBtn.visible = false
-                passwordModal.visible = true
-                root.adminVisible = true
-                controller.pauseRecognition()
+            onDoubleClicked: {
+                settingsBtn.visible = true
+                settingsHideTimer.restart()
             }
+            z: 5
         }
-    }
 
-    // ── Password modal ────────────────────────────────────────────────────────
-    Rectangle {
-        id: passwordModal
-        visible: false
-        anchors.fill: parent
-        color: "#b3000000"
-        z: 40
+        Timer {
+            id: settingsHideTimer
+            interval: 6000
+            onTriggered: settingsBtn.visible = false
+        }
 
         Rectangle {
-            anchors.centerIn: parent
-            width: 320; height: pwCol.implicitHeight + 48
-            radius: 20
-            color: "#0f172a"
-            border.color: "#334155"
+            id: settingsBtn
+            visible: false
+            z: 30
+            width: 44; height: 44; radius: 22
+            color: "#cc1e293b"
+            border.color: "#4d64748b"
+            anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 16 }
 
-            Column {
-                id: pwCol
-                anchors { top: parent.top; left: parent.left; right: parent.right
-                          topMargin: 28; leftMargin: 24; rightMargin: 24 }
-                spacing: 0
+            Text {
+                anchors.centerIn: parent
+                text: "⚙"
+                color: "#94a3b8"
+                font.pixelSize: 22
+            }
 
-                Row {
-                    spacing: 12
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    settingsBtn.visible = false
+                    passwordModal.visible = true
+                    root.adminVisible = true
+                    controller.pauseRecognition()
+                }
+            }
+        }
+
+        // ── Password modal ────────────────────────────────────────────────────
+        Rectangle {
+            id: passwordModal
+            visible: false
+            anchors.fill: parent
+            color: "#b3000000"
+            z: 40
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 320; height: pwCol.implicitHeight + 48
+                radius: 20
+                color: "#0f172a"
+                border.color: "#334155"
+
+                Column {
+                    id: pwCol
+                    anchors { top: parent.top; left: parent.left; right: parent.right
+                              topMargin: 28; leftMargin: 24; rightMargin: 24 }
+                    spacing: 0
+
+                    Row {
+                        spacing: 12
+                        Rectangle {
+                            width: 36; height: 36; radius: 8
+                            color: "#331f2937"
+                            Text { anchors.centerIn: parent; text: "🔒"; font.pixelSize: 18 }
+                        }
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 2
+                            Text { text: "Accès administrateur"; color: "white"; font.pixelSize: 14; font.weight: Font.Bold }
+                            Text { text: "Entrez le mot de passe admin"; color: "#64748b"; font.pixelSize: 11 }
+                        }
+                    }
+
+                    Item { width: 1; height: 20 }
+
                     Rectangle {
-                        width: 36; height: 36; radius: 8
-                        color: "#331f2937"
-                        Text { anchors.centerIn: parent; text: "🔒"; font.pixelSize: 18 }
+                        width: parent.width; height: 42
+                        radius: 10
+                        color: "#1e293b"
+                        border.color: pwInput.activeFocus ? "#3b82f6" : "#334155"
+
+                        TextInput {
+                            id: pwInput
+                            anchors { fill: parent; leftMargin: 12; rightMargin: 12; topMargin: 4; bottomMargin: 4 }
+                            echoMode: TextInput.Password
+                            color: "white"
+                            font.pixelSize: 14
+                            font.family: "monospace"
+                            verticalAlignment: TextInput.AlignVCenter
+                            Keys.onReturnPressed: checkPassword()
+                        }
                     }
-                    Column {
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 2
-                        Text { text: "Accès administrateur"; color: "white"; font.pixelSize: 14; font.weight: Font.Bold }
-                        Text { text: "Entrez le mot de passe admin"; color: "#64748b"; font.pixelSize: 11 }
+
+                    Item { width: 1; height: 8 }
+
+                    Text {
+                        id: pwError
+                        visible: false
+                        text: "Mot de passe incorrect."
+                        color: "#f87171"
+                        font.pixelSize: 12
                     }
-                }
 
-                Item { width: 1; height: 20 }
+                    Item { width: 1; height: 16 }
 
-                Rectangle {
-                    width: parent.width; height: 42
-                    radius: 10
-                    color: "#1e293b"
-                    border.color: pwInput.activeFocus ? "#3b82f6" : "#334155"
+                    Row {
+                        width: parent.width
+                        spacing: 8
 
-                    TextInput {
-                        id: pwInput
-                        anchors { fill: parent; leftMargin: 12; rightMargin: 12; topMargin: 4; bottomMargin: 4 }
-                        echoMode: TextInput.Password
-                        color: "white"
-                        font.pixelSize: 14
-                        font.family: "monospace"
-                        verticalAlignment: TextInput.AlignVCenter
-                        Keys.onReturnPressed: checkPassword()
-                    }
-                }
+                        Rectangle {
+                            width: (parent.width - 8) / 2; height: 40
+                            radius: 10; color: "#1e293b"
+                            Text { anchors.centerIn: parent; text: "Annuler"; color: "#94a3b8"; font.pixelSize: 13 }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    passwordModal.visible = false
+                                    pwInput.text = ""
+                                    pwError.visible = false
+                                    root.adminVisible = false
+                                    controller.resumeRecognition()
+                                }
+                            }
+                        }
 
-                Item { width: 1; height: 8 }
-
-                Text {
-                    id: pwError
-                    visible: false
-                    text: "Mot de passe incorrect."
-                    color: "#f87171"
-                    font.pixelSize: 12
-                }
-
-                Item { width: 1; height: 16 }
-
-                Row {
-                    width: parent.width
-                    spacing: 8
-
-                    Rectangle {
-                        width: (parent.width - 8) / 2; height: 40
-                        radius: 10; color: "#1e293b"
-                        Text { anchors.centerIn: parent; text: "Annuler"; color: "#94a3b8"; font.pixelSize: 13 }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: {
-                                passwordModal.visible = false
-                                pwInput.text = ""
-                                pwError.visible = false
-                                root.adminVisible = false
-                                controller.resumeRecognition()
+                        Rectangle {
+                            width: (parent.width - 8) / 2; height: 40
+                            radius: 10; color: "#2563eb"
+                            Text { anchors.centerIn: parent; text: "Valider"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: checkPassword()
                             }
                         }
                     }
 
-                    Rectangle {
-                        width: (parent.width - 8) / 2; height: 40
-                        radius: 10; color: "#2563eb"
-                        Text { anchors.centerIn: parent; text: "Valider"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: checkPassword()
-                        }
-                    }
+                    Item { width: 1; height: 4 }
                 }
+            }
 
-                Item { width: 1; height: 4 }
+            function checkPassword() {
+                if (pwInput.text === "2899100*-+") {
+                    passwordModal.visible = false
+                    pwInput.text = ""
+                    pwError.visible = false
+                    root.adminVisible = false
+                    controller.resumeRecognition()
+                } else {
+                    pwError.visible = true
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                z: -1
+                onClicked: {
+                    passwordModal.visible = false
+                    pwInput.text = ""
+                    pwError.visible = false
+                    root.adminVisible = false
+                    controller.resumeRecognition()
+                }
             }
         }
 
-        function checkPassword() {
-            if (pwInput.text === "2899100*-+") {
-                passwordModal.visible = false
-                pwInput.text = ""
-                pwError.visible = false
-                // (admin menu can be expanded later)
-                root.adminVisible = false
-                controller.resumeRecognition()
-            } else {
-                pwError.visible = true
-            }
+        // ── Status bar ────────────────────────────────────────────────────────
+        StatusBar {
+            id: statusBar
+            anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+            badgeConnected: controller.badgeConnected
+            faceConnected:  controller.faceConnected
         }
-
-        MouseArea {
-            anchors.fill: parent
-            z: -1
-            onClicked: {
-                passwordModal.visible = false
-                pwInput.text = ""
-                pwError.visible = false
-                root.adminVisible = false
-                controller.resumeRecognition()
-            }
-        }
-    }
-
-    // ── Status bar ────────────────────────────────────────────────────────────
-    StatusBar {
-        id: statusBar
-        anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-        badgeConnected: controller.badgeConnected
-        faceConnected:  controller.faceConnected
     }
 }

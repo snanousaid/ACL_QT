@@ -6,8 +6,8 @@
 
 int main(int argc, char *argv[])
 {
-    // Use X11 (xcb) so xorg.conf rotation/touch transform applies
-    qputenv("QT_QPA_PLATFORM", "xcb");
+    qputenv("QT_QPA_PLATFORM", "eglfs");
+    qputenv("QT_QPA_EGLFS_INTEGRATION", "none");
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 6, 0)
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
