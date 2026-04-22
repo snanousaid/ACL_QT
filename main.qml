@@ -193,22 +193,12 @@ Window {
 
                     Item { width: 1; height: 20 }
 
-                    Rectangle {
-                        width: parent.width; height: 42
-                        radius: 10
-                        color: "#1e293b"
-                        border.color: pwInput.activeFocus ? "#3b82f6" : "#334155"
-
-                        TextInput {
-                            id: pwInput
-                            anchors { fill: parent; leftMargin: 12; rightMargin: 12; topMargin: 4; bottomMargin: 4 }
-                            echoMode: TextInput.Password
-                            color: "white"
-                            font.pixelSize: 14
-                            font.family: "monospace"
-                            verticalAlignment: TextInput.AlignVCenter
-                            Keys.onReturnPressed: checkPassword()
-                        }
+                    KbInput {
+                        id: pwInput
+                        width: parent.width
+                        keyboard:   keyboard
+                        isPassword: true
+                        placeholder: "••••••••••"
                     }
 
                     Item { width: 1; height: 8 }
@@ -235,7 +225,7 @@ Window {
                                 anchors.fill: parent
                                 onClicked: {
                                     passwordModal.visible = false
-                                    pwInput.text = ""
+                                    pwInput.text = ""; keyboard.close()
                                     pwError.visible = false
                                     root.adminVisible = false
                                     controller.resumeRecognition()
@@ -260,8 +250,9 @@ Window {
 
             function checkPassword() {
                 if (pwInput.text === "2899100*-+") {
+                    keyboard.close()
                     passwordModal.visible = false
-                    pwInput.text = ""
+                    pwInput.text = ""; keyboard.close()
                     pwError.visible = false
                     root.adminVisible = false
                     controller.resumeRecognition()
@@ -275,7 +266,7 @@ Window {
                 z: -1
                 onClicked: {
                     passwordModal.visible = false
-                    pwInput.text = ""
+                    pwInput.text = ""; keyboard.close()
                     pwError.visible = false
                     root.adminVisible = false
                     controller.resumeRecognition()
@@ -290,5 +281,8 @@ Window {
             badgeConnected: controller.badgeConnected
             faceConnected:  controller.faceConnected
         }
+
+        // ── Virtual keyboard (shared, z:60) ───────────────────────────────────
+        VirtualKeyboard { id: keyboard }
     }
 }
