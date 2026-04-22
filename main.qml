@@ -256,7 +256,7 @@ Window {
                             Text { anchors.centerIn: parent; text: "Valider"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold }
                             MouseArea {
                                 anchors.fill: parent
-                                onPressed: checkPassword()
+                                onPressed: passwordModal.checkPassword()
                             }
                         }
                     }
