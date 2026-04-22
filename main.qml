@@ -32,7 +32,7 @@ Window {
     property int  _tapCount: 0
     Timer {
         id: doubleTapTimer
-        interval: 400
+        interval: 5000
         onTriggered: root._tapCount = 0
     }
     MouseArea {
