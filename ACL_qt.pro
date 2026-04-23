@@ -20,6 +20,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
                 -ltbb \
                 -lprotobuf
         QMAKE_LFLAGS += -Wl,-rpath-link,$$A133_SYSROOT/usr/lib/aarch64-linux-gnu
+        QMAKE_LFLAGS += -Wl,--allow-shlib-undefined
         DEFINES += ACL_OPENCV_ENABLED
         message("OpenCV 4 (A133 sysroot) trouvé — face detection activée")
     } else {
