@@ -29,8 +29,25 @@ Window {
 
     property bool adminVisible: false
 
-    // Compteur de double-tap (le MouseArea est dans rotatedContent — voir ci-dessous)
-    property int _tapCount: 0
+    // Compteur de double-tap
+    property int  _tapCount:  0
+    property real _lastTapMs: 0   // déduplication touch natif + synthèse mouse
+
+    function _handleTap() {
+        var now = Date.now()
+        if (now - root._lastTapMs < 150) return   // même tap reçu deux fois (MPTA + synthèse)
+        root._lastTapMs = now
+        root._tapCount++
+        if (root._tapCount >= 2) {
+            root._tapCount = 0
+            doubleTapTimer.stop()
+            settingsBtn.visible = true
+            settingsHideTimer.restart()
+        } else {
+            doubleTapTimer.restart()
+        }
+    }
+
     Timer {
         id: doubleTapTimer
         interval: 5000
@@ -48,23 +65,22 @@ Window {
         height: 1024
         rotation: 90
 
-        // Détecteur de double-tap — DANS rotatedContent pour partager le même
-        // système de coordonnées que les boutons. z:-1 → derrière toute l'UI,
-        // ne capte un tap que si aucun bouton ne l'a accepté.
+        // ── Détecteur de double-tap ──────────────────────────────────────────
+        // MouseArea : souris native (x64 / desktop)
+        // MultiPointTouchArea : touch natif eglfs/evdev (A133) — accepte le touch
+        //   AVANT la synthèse mouse → sur board seul le MPTA se déclenche.
+        //   Sur desktop (pas de touch), seul le MouseArea se déclenche.
+        //   _handleTap() déduplique les rares cas de double-fire (< 150 ms).
         MouseArea {
             anchors.fill: parent
             z: -1
-            onPressed: {
-                root._tapCount++
-                if (root._tapCount >= 2) {
-                    root._tapCount = 0
-                    doubleTapTimer.stop()
-                    settingsBtn.visible = true
-                    settingsHideTimer.restart()
-                } else {
-                    doubleTapTimer.restart()
-                }
-            }
+            onPressed: root._handleTap()
+        }
+        MultiPointTouchArea {
+            anchors.fill: parent
+            z: -1
+            touchPoints: [ TouchPoint { id: bgTouch } ]
+            onPressed: root._handleTap()
         }
 
         // ── Header ───────────────────────────────────────────────────────────
