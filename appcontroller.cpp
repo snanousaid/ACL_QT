@@ -108,17 +108,11 @@ void AppController::handleEvent(const QJsonObject &data, const QString &source)
     const double  score = data.value(QStringLiteral("score")).toDouble(0.0);
     const QString time  = isoToTime(data.value(QStringLiteral("createdAt")).toString());
 
-    qDebug() << "[ACL]" << source << "granted=" << granted
-             << "name=" << name << "door=" << door << "userId=" << userId;
-
     emit accessEvent(granted, name, source, score, door, time, userId);
 }
 
 void AppController::onBadgeEvent(const QString &evName, const QJsonObject &data)
 {
-    qDebug() << "[ACL badge socket] event name:" << evName
-             << "keys:" << data.keys();
-    // Accepte "event" (standard) + noms alternatifs courants
     if (evName == QStringLiteral("event")         ||
         evName == QStringLiteral("access")        ||
         evName == QStringLiteral("access_event")  ||
@@ -128,7 +122,6 @@ void AppController::onBadgeEvent(const QString &evName, const QJsonObject &data)
 
 void AppController::onFaceEvent(const QString &evName, const QJsonObject &data)
 {
-    qDebug() << "[ACL face socket] event name:" << evName;
     if (evName == QStringLiteral("event"))
         handleEvent(data, QStringLiteral("face"));
 }

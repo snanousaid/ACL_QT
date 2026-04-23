@@ -94,7 +94,6 @@ void SocketIoClient::onTextMessage(const QString &msg)
         if (sio == '2') {
             // Socket.IO EVENT: 42["eventName", {...}]
             const QString payload = msg.mid(2);
-            qDebug() << "[ACL socket raw]" << payload.left(300);
             QJsonDocument doc = QJsonDocument::fromJson(payload.toUtf8());
             if (doc.isArray() && doc.array().size() >= 1) {
                 const QString name = doc.array()[0].toString();
@@ -109,7 +108,6 @@ void SocketIoClient::onTextMessage(const QString &msg)
                         if (inner.isObject()) data = inner.object();
                     }
                 }
-                qDebug() << "[ACL socket parsed] name=" << name << "keys=" << data.keys();
                 emit eventReceived(name, data);
             }
             return;
