@@ -29,6 +29,10 @@ Window {
         }
     }
 
+    // Alias de la context property "controller" pour éviter les boucles de binding
+    // dans les modals qui ont aussi une propriété nommée "controller".
+    property var _ctrl: controller
+
     property bool adminVisible: false
 
     // Compteur de double-tap
@@ -332,7 +336,7 @@ Window {
         // ── Network config modal ──────────────────────────────────────────────
         NetworkConfigModal {
             id: networkSettings
-            controller: controller
+            controller: root._ctrl
             keyboard: keyboard
             onClosed: adminMenu.open()
         }
@@ -340,8 +344,7 @@ Window {
         // ── Face settings modal ───────────────────────────────────────────────
         FaceSettingsModal {
             id: faceSettings
-            controller: controller
-            // Re-ouvre l'admin menu en sortant (admin reste pausée)
+            controller: root._ctrl
             onClosed: adminMenu.open()
             onOpenEnroll: { faceSettings.visible = false; enrollment.open() }
         }
@@ -349,9 +352,9 @@ Window {
         // ── Enrolment modal (sous-modal de FaceSettings) ─────────────────────
         EnrollmentModal {
             id: enrollment
-            controller: controller
+            controller: root._ctrl
             keyboard: keyboard
-            onClosed: { faceSettings.open() }   // retour à la liste
+            onClosed: { faceSettings.open() }
         }
 
         // ── Qt Virtual Keyboard ───────────────────────────────────────────────
