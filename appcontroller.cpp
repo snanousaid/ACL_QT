@@ -94,9 +94,11 @@ void AppController::handleEvent(const QJsonObject &data, const QString &source)
     if (name.isEmpty()) name = data.value(QStringLiteral("name")).toString().trimmed();
     if (name.isEmpty()) name = QStringLiteral("Anonyme");
 
-    // ── userId ────────────────────────────────────────────────────────────────
+    // ── userId — vide si l'utilisateur n'a pas de photo (évite un GET 404) ───
     QString userId = data.value(QStringLiteral("userId")).toString();
     if (userId.isEmpty()) userId = user.value(QStringLiteral("id")).toString();
+    if (!user.isEmpty() && user.value(QStringLiteral("image")).isNull())
+        userId.clear();
 
     // ── Porte ─────────────────────────────────────────────────────────────────
     QString door = data.value(QStringLiteral("doorName")).toString();
