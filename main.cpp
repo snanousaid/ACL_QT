@@ -1,8 +1,10 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QDebug>
 #include "mjpegitem.h"
 #include "appcontroller.h"
+#include "opencvtest.h"
 
 int main(int argc, char *argv[])
 {
@@ -16,6 +18,11 @@ int main(int argc, char *argv[])
     qputenv("QT_IM_MODULE", QByteArray("qtvirtualkeyboard"));
 
     QGuiApplication app(argc, argv);
+
+    // ── Test OpenCV (retirer après validation) ────────────────────────────
+    QString cvResult = runOpenCvTest(QStringLiteral("/opt/ACL/FACE_detection/models"));
+    qDebug() << "[OpenCV TEST]" << cvResult;
+    // ─────────────────────────────────────────────────────────────────────
 
     qmlRegisterType<MjpegItem>     ("ACL", 1, 0, "MjpegItem");
     qmlRegisterType<AppController> ("ACL", 1, 0, "AppControllerType");

@@ -3,16 +3,24 @@ CONFIG += c++11
 
 DEFINES += QT_DEPRECATED_WARNINGS
 
+# ── OpenCV (A133 Linux via pkg-config) ────────────────────────────────────
+unix {
+    CONFIG += link_pkgconfig
+    PKGCONFIG += opencv4
+}
+
 SOURCES += \
     main.cpp \
     mjpegitem.cpp \
     socketioclient.cpp \
-    appcontroller.cpp
+    appcontroller.cpp \
+    opencvtest.cpp
 
 HEADERS += \
     mjpegitem.h \
     socketioclient.h \
-    appcontroller.h
+    appcontroller.h \
+    opencvtest.h
 
 RESOURCES += qml.qrc
 
