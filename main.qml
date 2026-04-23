@@ -2,6 +2,7 @@ import QtQuick 2.10
 import QtQuick.Window 2.10
 import QtQuick.VirtualKeyboard 2.3
 import ACL 1.0
+// controller est injecté comme context property depuis main.cpp
 
 Window {
     id: root
@@ -13,9 +14,9 @@ Window {
     color: "#0d1117"
     title: "ACL Terminal"
 
-    // ── Backend (non-visual — lives outside the rotation container) ──────────
-    AppControllerType {
-        id: controller
+    // ── Connexion accessEvent (controller injecté depuis main.cpp) ───────────
+    Connections {
+        target: controller
         onAccessEvent: {
             accessCard.granted      = granted
             accessCard.personName   = name
@@ -142,6 +143,9 @@ Window {
             }
             mjpegUrl:     controller.mjpegUrl
             streamPaused: root.adminVisible
+            faceInFrame:  controller.faceInFrame
+            faceInRoi:    controller.faceInRoi
+            faceAccess:   controller.faceAccess
         }
 
         // ── Access card overlay ───────────────────────────────────────────────

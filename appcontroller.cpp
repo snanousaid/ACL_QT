@@ -3,10 +3,10 @@
 #include <QNetworkReply>
 #include <QJsonDocument>
 #include <QJsonArray>
-#include <QHttpMultiPart>
 #include <QUrlQuery>
 #include <QDateTime>
 #include <QTime>
+#include <QTimer>
 #include <QUrl>
 
 AppController::AppController(QObject *parent)
@@ -14,6 +14,7 @@ AppController::AppController(QObject *parent)
 {
     m_nam = new QNetworkAccessManager(this);
 
+    // ── Badge socket ──────────────────────────────────────────────────────────
     m_badgeSocket = new SocketIoClient(m_badgeSocketUrl, this);
     connect(m_badgeSocket, &SocketIoClient::connected, this, [this] {
         m_badgeConnected = true;
@@ -26,18 +27,31 @@ AppController::AppController(QObject *parent)
     connect(m_badgeSocket, &SocketIoClient::eventReceived,
             this, &AppController::onBadgeEvent);
 
-    m_faceSocket = new SocketIoClient(m_faceSocketUrl, this);
-    connect(m_faceSocket, &SocketIoClient::connected, this, [this] {
-        m_faceConnected = true;
-        emit faceConnectedChanged();
-    });
-    connect(m_faceSocket, &SocketIoClient::disconnected, this, [this] {
-        m_faceConnected = false;
-        emit faceConnectedChanged();
-    });
-    connect(m_faceSocket, &SocketIoClient::eventReceived,
-            this, &AppController::onFaceEvent);
+    // ── CameraWorker ──────────────────────────────────────────────────────────
+    m_camera = new CameraWorker(this);
+    connect(m_camera, &CameraWorker::frameReady,
+            this,     &AppController::frameReady);
+    connect(m_camera, &CameraWorker::faceStatusChanged,
+            this,     &AppController::onCamFaceStatus);
+    connect(m_camera, &CameraWorker::accessGranted,
+            this,     &AppController::onCamAccessGranted);
+    connect(m_camera, &CameraWorker::accessDenied,
+            this,     &AppController::onCamAccessDenied);
+    connect(m_camera, &CameraWorker::enrollProgress,
+            this,     &AppController::onCamEnrollProgress);
+    connect(m_camera, &CameraWorker::enrollFinished,
+            this,     &AppController::onCamEnrollFinished);
+    m_camera->start();
+
+    // ── Timer reset faceAccess (3 s après granted/denied) ────────────────────
+    m_accessResetTimer = new QTimer(this);
+    m_accessResetTimer->setSingleShot(true);
+    m_accessResetTimer->setInterval(3000);
+    connect(m_accessResetTimer, &QTimer::timeout,
+            this, &AppController::resetFaceAccess);
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 static QString isoToTime(const QString &iso)
 {
@@ -51,9 +65,10 @@ static QString isoToTime(const QString &iso)
     return QTime::currentTime().toString(QStringLiteral("hh:mm:ss"));
 }
 
+// ── Badge events ──────────────────────────────────────────────────────────────
+
 void AppController::handleEvent(const QJsonObject &data, const QString &source)
 {
-    // ── Accordé : status booléen, eventType ou event_type (snake/camel) ──────
     bool granted = data.value(QStringLiteral("status")).toBool();
     if (!granted) {
         const QString evType  = data.value(QStringLiteral("eventType")).toString();
@@ -65,27 +80,22 @@ void AppController::handleEvent(const QJsonObject &data, const QString &source)
                   status  == QStringLiteral("GRANTED");
     }
 
-    // ── Nom : essaie plusieurs chemins possibles ───────────────────────────────
     const QJsonObject user = data.value(QStringLiteral("user")).toObject();
     QString name;
 
-    // 1) user.first_name + user.last_name
     {
         QString fn = user.value(QStringLiteral("first_name")).toString().trimmed();
         QString ln = user.value(QStringLiteral("last_name")).toString().trimmed();
         name = (fn + ' ' + ln).trimmed();
     }
-    // 2) user.firstName + user.lastName (camelCase)
     if (name.isEmpty()) {
         QString fn = user.value(QStringLiteral("firstName")).toString().trimmed();
         QString ln = user.value(QStringLiteral("lastName")).toString().trimmed();
         name = (fn + ' ' + ln).trimmed();
     }
-    // 3) user.name ou user.fullName
     if (name.isEmpty()) name = user.value(QStringLiteral("name")).toString().trimmed();
     if (name.isEmpty()) name = user.value(QStringLiteral("fullName")).toString().trimmed();
     if (name.isEmpty()) name = user.value(QStringLiteral("full_name")).toString().trimmed();
-    // 4) champs à la racine de data
     if (name.isEmpty()) {
         QString fn = data.value(QStringLiteral("first_name")).toString().trimmed();
         QString ln = data.value(QStringLiteral("last_name")).toString().trimmed();
@@ -94,13 +104,11 @@ void AppController::handleEvent(const QJsonObject &data, const QString &source)
     if (name.isEmpty()) name = data.value(QStringLiteral("name")).toString().trimmed();
     if (name.isEmpty()) name = QStringLiteral("Anonyme");
 
-    // ── userId — vide si l'utilisateur n'a pas de photo (évite un GET 404) ───
     QString userId = data.value(QStringLiteral("userId")).toString();
     if (userId.isEmpty()) userId = user.value(QStringLiteral("id")).toString();
     if (!user.isEmpty() && user.value(QStringLiteral("image")).isNull())
         userId.clear();
 
-    // ── Porte ─────────────────────────────────────────────────────────────────
     QString door = data.value(QStringLiteral("doorName")).toString();
     if (door.isEmpty()) door = data.value(QStringLiteral("readerName")).toString();
     if (door.isEmpty()) door = data.value(QStringLiteral("reader_")).toString();
@@ -126,163 +134,117 @@ void AppController::onFaceEvent(const QString &evName, const QJsonObject &data)
         handleEvent(data, QStringLiteral("face"));
 }
 
+// ── Camera slots ──────────────────────────────────────────────────────────────
+
+void AppController::onCamFaceStatus(bool face, bool inRoi, bool recognized)
+{
+    Q_UNUSED(recognized)
+    if (m_faceInFrame != face || m_faceInRoi != inRoi) {
+        m_faceInFrame = face;
+        m_faceInRoi   = inRoi;
+        emit faceStatusChanged();
+    }
+}
+
+void AppController::onCamAccessGranted(const QString &name, float score)
+{
+    m_faceAccess = QStringLiteral("granted");
+    emit faceStatusChanged();
+    m_accessResetTimer->start();
+
+    const QString time = QTime::currentTime().toString(QStringLiteral("hh:mm:ss"));
+    emit accessEvent(true, name, QStringLiteral("face"),
+                     static_cast<double>(score), QString(), time, QString());
+}
+
+void AppController::onCamAccessDenied(const QString &reason, float score)
+{
+    m_faceAccess = QStringLiteral("denied");
+    emit faceStatusChanged();
+    m_accessResetTimer->start();
+
+    const QString time = QTime::currentTime().toString(QStringLiteral("hh:mm:ss"));
+    emit accessEvent(false, reason, QStringLiteral("face"),
+                     static_cast<double>(score), QString(), time, QString());
+}
+
+void AppController::onCamEnrollProgress(const QVariantMap &status)
+{
+    m_lastEnrollStatus = status;
+    emit enrollStatus(status);
+}
+
+void AppController::onCamEnrollFinished(bool ok, const QString &msg)
+{
+    m_lastEnrollStatus.clear();
+    emit enrollResult(QStringLiteral("finalize"), ok, msg);
+    if (ok) emit faceUserMutated(QStringLiteral("enroll"), QString());
+}
+
+void AppController::resetFaceAccess()
+{
+    m_faceAccess.clear();
+    emit faceStatusChanged();
+}
+
+// ── Recognition pause/resume ──────────────────────────────────────────────────
+
 void AppController::pauseRecognition()
 {
-    QUrl url(m_faceApiUrl + QStringLiteral("/recognition/pause"));
-    QNetworkRequest req(url);
-    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    m_nam->post(req, QByteArray());
+    m_camera->pause();
 }
 
 void AppController::resumeRecognition()
 {
-    QUrl url(m_faceApiUrl + QStringLiteral("/recognition/resume"));
-    QNetworkRequest req(url);
-    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    m_nam->post(req, QByteArray());
+    m_camera->resume();
 }
 
-// ── Face users management ──────────────────────────────────────────────────
+// ── Face users (CameraWorker/FaceDb) ─────────────────────────────────────────
+
 void AppController::listFaceUsers()
 {
-    QNetworkRequest req(QUrl(m_faceApiUrl + QStringLiteral("/api/users")));
-    QNetworkReply *reply = m_nam->get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            emit faceApiError(QStringLiteral("list"), reply->errorString());
-            return;
-        }
-        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-        if (!doc.isArray()) {
-            emit faceApiError(QStringLiteral("list"), QStringLiteral("Réponse invalide"));
-            return;
-        }
-        QVariantList users;
-        for (const QJsonValue &v : doc.array())
-            users.append(v.toObject().toVariantMap());
-        emit faceUsersLoaded(users);
-    });
+    emit faceUsersLoaded(m_camera->listUsers());
 }
 
 void AppController::toggleFaceUser(const QString &name)
 {
-    const QUrl url(m_faceApiUrl + QStringLiteral("/api/users/") + name + QStringLiteral("/toggle"));
-    QNetworkRequest req(url);
-    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    QNetworkReply *reply = m_nam->post(req, QByteArray());
-    connect(reply, &QNetworkReply::finished, this, [this, reply, name] {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            emit faceApiError(QStringLiteral("toggle"), reply->errorString());
-            return;
-        }
-        emit faceUserMutated(QStringLiteral("toggle"), name);
-    });
+    m_camera->toggleUser(name);
+    emit faceUserMutated(QStringLiteral("toggle"), name);
 }
 
 void AppController::deleteFaceUser(const QString &name)
 {
-    const QUrl url(m_faceApiUrl + QStringLiteral("/api/users/") + name);
-    QNetworkRequest req(url);
-    QNetworkReply *reply = m_nam->deleteResource(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, name] {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            emit faceApiError(QStringLiteral("delete"), reply->errorString());
-            return;
-        }
-        emit faceUserMutated(QStringLiteral("delete"), name);
-    });
+    m_camera->deleteUser(name);
+    emit faceUserMutated(QStringLiteral("delete"), name);
 }
 
-// ── Enrôlement live ────────────────────────────────────────────────────────
-static QByteArray formEncode(const QList<QPair<QString, QString>> &pairs)
-{
-    QUrlQuery q;
-    for (const auto &p : pairs) q.addQueryItem(p.first, p.second);
-    return q.toString(QUrl::FullyEncoded).toUtf8();
-}
-
-static void parseOkMsg(QNetworkReply *reply, bool *ok, QString *msg)
-{
-    *ok = false;
-    *msg = QString();
-    const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-    if (doc.isObject()) {
-        const QJsonObject o = doc.object();
-        *ok  = o.value(QStringLiteral("ok")).toBool();
-        *msg = o.value(QStringLiteral("msg")).toString();
-    }
-}
+// ── Enrôlement live ───────────────────────────────────────────────────────────
 
 void AppController::startEnroll(const QString &name, const QString &role, int samplesPerPose)
 {
-    QNetworkRequest req(QUrl(m_faceApiUrl + QStringLiteral("/enroll_live/start")));
-    req.setHeader(QNetworkRequest::ContentTypeHeader,
-                  QStringLiteral("application/x-www-form-urlencoded"));
-    const QByteArray body = formEncode({
-        {QStringLiteral("name"), name},
-        {QStringLiteral("role"), role},
-        {QStringLiteral("samples_per_pose"), QString::number(samplesPerPose)},
-    });
-    QNetworkReply *reply = m_nam->post(req, body);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            emit enrollResult(QStringLiteral("start"), false, reply->errorString());
-            return;
-        }
-        bool ok; QString msg;
-        parseOkMsg(reply, &ok, &msg);
-        emit enrollResult(QStringLiteral("start"), ok, msg);
-    });
+    m_camera->startEnroll(name, role, samplesPerPose);
+    emit enrollResult(QStringLiteral("start"), true, QStringLiteral("Enrôlement démarré"));
 }
 
 void AppController::finalizeEnroll()
 {
-    QNetworkRequest req(QUrl(m_faceApiUrl + QStringLiteral("/enroll_live/finalize")));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    QNetworkReply *reply = m_nam->post(req, QByteArray());
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            emit enrollResult(QStringLiteral("finalize"), false, reply->errorString());
-            return;
-        }
-        bool ok; QString msg;
-        parseOkMsg(reply, &ok, &msg);
-        emit enrollResult(QStringLiteral("finalize"), ok, msg);
-    });
+    m_camera->finalizeEnroll();
 }
 
 void AppController::cancelEnroll()
 {
-    QNetworkRequest req(QUrl(m_faceApiUrl + QStringLiteral("/enroll_live/cancel")));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    QNetworkReply *reply = m_nam->post(req, QByteArray());
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        bool ok = (reply->error() == QNetworkReply::NoError);
-        QString msg = ok ? QStringLiteral("annulé") : reply->errorString();
-        emit enrollResult(QStringLiteral("cancel"), ok, msg);
-    });
+    m_camera->cancelEnroll();
+    emit enrollResult(QStringLiteral("cancel"), true, QStringLiteral("annulé"));
 }
 
 void AppController::pollEnrollStatus()
 {
-    QNetworkRequest req(QUrl(m_faceApiUrl + QStringLiteral("/status.json")));
-    QNetworkReply *reply = m_nam->get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) return;  // silent — poll récurrent
-        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-        if (doc.isObject())
-            emit enrollStatus(doc.object().toVariantMap());
-    });
+    if (!m_lastEnrollStatus.isEmpty())
+        emit enrollStatus(m_lastEnrollStatus);
 }
 
-// ── Config réseau ──────────────────────────────────────────────────────────
+// ── Config réseau (REST → m_controllerUrl) ────────────────────────────────────
+
 void AppController::getNetworkInfo()
 {
     QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/network/info")));
@@ -298,7 +260,7 @@ void AppController::getNetworkInfo()
             emit networkApiError(QStringLiteral("info"), QStringLiteral("Réponse invalide"));
             return;
         }
-        const QJsonObject o = doc.object();
+        const QJsonObject o    = doc.object();
         const QJsonObject wifi = o.value(QStringLiteral("wifi")).toObject();
         const QJsonObject eth  = o.value(QStringLiteral("ethernet")).toObject();
         QVariantMap info;

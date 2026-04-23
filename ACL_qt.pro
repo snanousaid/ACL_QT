@@ -33,13 +33,19 @@ SOURCES += \
     mjpegitem.cpp \
     socketioclient.cpp \
     appcontroller.cpp \
-    opencvtest.cpp
+    opencvtest.cpp \
+    facedb.cpp \
+    cameraworker.cpp \
+    cameraimgprovider.cpp
 
 HEADERS += \
     mjpegitem.h \
     socketioclient.h \
     appcontroller.h \
-    opencvtest.h
+    opencvtest.h \
+    facedb.h \
+    cameraworker.h \
+    cameraimgprovider.h
 
 RESOURCES += qml.qrc
 

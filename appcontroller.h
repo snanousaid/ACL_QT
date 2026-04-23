@@ -1,16 +1,22 @@
 #pragma once
 #include <QObject>
 #include <QJsonObject>
+#include <QImage>
 #include <QNetworkAccessManager>
 #include "socketioclient.h"
+#include "cameraworker.h"
 
 class AppController : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(bool badgeConnected  READ badgeConnected  NOTIFY badgeConnectedChanged)
-    Q_PROPERTY(bool faceConnected   READ faceConnected   NOTIFY faceConnectedChanged)
-    Q_PROPERTY(QString mjpegUrl     READ mjpegUrl        CONSTANT)
-    Q_PROPERTY(QString controllerUrl READ controllerUrl  CONSTANT)
+    Q_PROPERTY(bool    badgeConnected READ badgeConnected  NOTIFY badgeConnectedChanged)
+    Q_PROPERTY(bool    faceConnected  READ faceConnected   NOTIFY faceConnectedChanged)
+    Q_PROPERTY(QString mjpegUrl       READ mjpegUrl        CONSTANT)
+    Q_PROPERTY(QString controllerUrl  READ controllerUrl   CONSTANT)
+    // ── État visage (remplace le polling /status.json) ──────────────────────
+    Q_PROPERTY(bool    faceInFrame  READ faceInFrame  NOTIFY faceStatusChanged)
+    Q_PROPERTY(bool    faceInRoi    READ faceInRoi    NOTIFY faceStatusChanged)
+    Q_PROPERTY(QString faceAccess   READ faceAccess   NOTIFY faceStatusChanged)
 
 public:
     explicit AppController(QObject *parent = nullptr);
@@ -19,16 +25,19 @@ public:
     bool    faceConnected()  const { return m_faceConnected;  }
     QString mjpegUrl()       const { return m_mjpegUrl;       }
     QString controllerUrl()  const { return m_controllerUrl;  }
+    bool    faceInFrame()    const { return m_faceInFrame;    }
+    bool    faceInRoi()      const { return m_faceInRoi;      }
+    QString faceAccess()     const { return m_faceAccess;     }
 
     Q_INVOKABLE void pauseRecognition();
     Q_INVOKABLE void resumeRecognition();
 
-    // ── Face users management (REST → m_faceApiUrl) ─────────────────────────
+    // ── Face users (C++ — FaceDb via CameraWorker) ──────────────────────────
     Q_INVOKABLE void listFaceUsers();
     Q_INVOKABLE void toggleFaceUser(const QString &name);
     Q_INVOKABLE void deleteFaceUser(const QString &name);
 
-    // ── Enrôlement live ─────────────────────────────────────────────────────
+    // ── Enrôlement live (C++) ───────────────────────────────────────────────
     Q_INVOKABLE void startEnroll(const QString &name, const QString &role,
                                  int samplesPerPose);
     Q_INVOKABLE void finalizeEnroll();
@@ -38,12 +47,10 @@ public:
     // ── Config réseau (REST → m_controllerUrl) ──────────────────────────────
     Q_INVOKABLE void getNetworkInfo();
     Q_INVOKABLE void scanWifi();
-    // wifi : si mode="dhcp" ignore ip/prefix/gateway/dns
     Q_INVOKABLE void connectWifi(const QString &ssid, const QString &password,
                                  const QString &mode,
                                  const QString &ip, const QString &prefix,
                                  const QString &gateway, const QString &dns);
-    // ethernet : si mode="dhcp" ignore ip/prefix/gateway/dns
     Q_INVOKABLE void setEthernet(const QString &mode,
                                  const QString &ip, const QString &prefix,
                                  const QString &gateway, const QString &dns);
@@ -51,24 +58,18 @@ public:
 signals:
     void badgeConnectedChanged();
     void faceConnectedChanged();
+    void faceStatusChanged();
+    void frameReady(const QImage &img);
     void accessEvent(bool granted, const QString &name, const QString &source,
                      double score, const QString &door, const QString &time,
                      const QString &userId);
-    // Liste reçue : QVariantList de {name, role, created_at, active, dim}
     void faceUsersLoaded(const QVariantList &users);
-    // Erreur (réseau ou HTTP non-2xx). msg = description courte.
     void faceApiError(const QString &op, const QString &msg);
-    // Mutation réussie (toggle/delete) → la modal recharge la liste.
     void faceUserMutated(const QString &op, const QString &name);
-    // Statut de l'enrôlement (poll), payload = QVariantMap aplati de status.json.
     void enrollStatus(const QVariantMap &status);
-    // Réponse start/finalize/cancel : ok + msg backend.
     void enrollResult(const QString &op, bool ok, const QString &msg);
-    // Infos réseau : {hostname, wifiIp, wifiMac, wifiSsid, wifiMode, ethIp, ethMac, ethIface, ethMode}
     void networkInfoLoaded(const QVariantMap &info);
-    // Scan Wi-Fi : QVariantList de {ssid, signal, security}
     void wifiNetworksLoaded(const QVariantList &networks);
-    // Résultat connexion wifi / ethernet
     void wifiConnectResult(bool ok, const QString &msg);
     void ethernetResult(bool ok, const QString &msg);
     void networkApiError(const QString &op, const QString &msg);
@@ -76,22 +77,34 @@ signals:
 private slots:
     void onBadgeEvent(const QString &evName, const QJsonObject &data);
     void onFaceEvent (const QString &evName, const QJsonObject &data);
+    void onCamFaceStatus(bool face, bool inRoi, bool recognized);
+    void onCamAccessGranted(const QString &name, float score);
+    void onCamAccessDenied(const QString &reason, float score);
+    void onCamEnrollProgress(const QVariantMap &status);
+    void onCamEnrollFinished(bool ok, const QString &msg);
+    void resetFaceAccess();
 
 private:
     void handleEvent(const QJsonObject &data, const QString &source);
 
-    // ── URLs — modifier ici pour changer la config ──────────────────────────
+    // ── URLs ────────────────────────────────────────────────────────────────
     const QString m_badgeSocketUrl = QStringLiteral("http://192.168.10.132:5000");
-    const QString m_faceSocketUrl  = QStringLiteral("http://192.168.10.132:5001");
-    const QString m_faceApiUrl     = QStringLiteral("http://192.168.10.132:5050");
-    const QString m_mjpegUrl       = QStringLiteral("http://192.168.10.132:5050/video_feed");
     const QString m_controllerUrl  = QStringLiteral("http://192.168.10.132:80/api/v2");
+    // mjpegUrl vide = mode C++ (CameraWorker fournit les frames)
+    const QString m_mjpegUrl       = QStringLiteral("");
     // ────────────────────────────────────────────────────────────────────────
 
-    bool m_badgeConnected = false;
-    bool m_faceConnected  = false;
+    bool    m_badgeConnected = false;
+    bool    m_faceConnected  = true;   // CameraWorker = toujours connecté
+    bool    m_faceInFrame    = false;
+    bool    m_faceInRoi      = false;
+    QString m_faceAccess;              // "" | "granted" | "denied"
 
     SocketIoClient        *m_badgeSocket;
-    SocketIoClient        *m_faceSocket;
     QNetworkAccessManager *m_nam;
+    CameraWorker          *m_camera;
+    QTimer                *m_accessResetTimer;
+
+    // Dernier statut enrollment pour pollEnrollStatus()
+    QVariantMap m_lastEnrollStatus;
 };
