@@ -38,7 +38,7 @@ Item {
         height: cardContent.implicitHeight + 80
         radius: 24
         color: root.granted ? "#0a1a12" : "#1a0a0e"
-        border.color: root.granted ? "#50 10b981" : "#50e11d48"
+        border.color: root.granted ? "#5010b981" : "#50e11d48"
         border.width: 1
 
         // Glow
