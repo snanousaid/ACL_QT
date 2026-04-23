@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
 
     // ── Test OpenCV (retirer après validation) ────────────────────────────
-    QString cvResult = runOpenCvTest(QStringLiteral("/opt/ACL/FACE_detection/models"));
+    QString cvResult = runOpenCvTest(QStringLiteral("/opt/ACL_qt/models"));
     qDebug() << "[OpenCV TEST]" << cvResult;
     // ─────────────────────────────────────────────────────────────────────
 
