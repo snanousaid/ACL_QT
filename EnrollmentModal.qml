@@ -22,6 +22,9 @@ Rectangle {
     // Statut backend (rempli par poll)
     property var status: ({})
 
+    // URL de base pour les thumbnails de poses
+    property string _baseUrl: controller ? controller.mjpegUrl.replace("/video_feed", "") : ""
+
     signal closed()
 
     function open() {
@@ -217,7 +220,7 @@ Rectangle {
             Rectangle {
                 id: previewBox
                 anchors { top: parent.top; left: parent.left; right: parent.right }
-                height: width
+                height: 200
                 color: "#000"; radius: 12
                 clip: true
 
@@ -245,39 +248,77 @@ Rectangle {
                 wrapMode: Text.WordWrap
             }
 
-            // Liste poses
-            Column {
+            // Grille thumbnails 5 poses
+            Row {
+                id: poseGrid
                 anchors { top: msgTxt.bottom; left: parent.left; right: parent.right; topMargin: 12 }
-                spacing: 6
+                spacing: 4
 
                 Repeater {
                     model: root.status.enroll_poses || []
-                    Rectangle {
-                        width: parent.width; height: 36; radius: 8
-                        color: modelData.done ? "#0f3a26"
-                             : (modelData.id === root.status.enroll_current_pose ? "#1e3a8a" : "#1e293b")
-                        border.color: modelData.done ? "#22c55e"
-                                    : (modelData.id === root.status.enroll_current_pose ? "#3b82f6" : "#334155")
 
-                        Row {
-                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                            spacing: 10
+                    Rectangle {
+                        property bool isCurrent: modelData.id === root.status.enroll_current_pose
+                        property int  cellW: (poseGrid.width - 4 * poseGrid.spacing) / 5
+
+                        width:  cellW; height: 94; radius: 8
+                        clip:   true
+                        color:  modelData.done ? "#0f3a26" : (isCurrent ? "#0c2a3a" : "#1e293b")
+                        border.width: 1.5
+                        border.color: modelData.done ? "#22c55e" : (isCurrent ? "#22d3ee" : "#334155")
+
+                        // Thumbnail (si des échantillons existent)
+                        Image {
+                            id: thumb
+                            anchors { top: parent.top; left: parent.left; right: parent.right }
+                            height: 72
+                            source: modelData.count > 0
+                                    ? (root._baseUrl + "/pose_thumb/" + modelData.id + ".jpg?c=" + modelData.count)
+                                    : ""
+                            fillMode: Image.PreserveAspectCrop
+                            visible: modelData.count > 0 && status === Image.Ready
+                            asynchronous: true
+                        }
+
+                        // Placeholder quand pas encore de sample
+                        Text {
+                            anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 18 }
+                            visible: modelData.count === 0
+                            text:    isCurrent ? "◎" : "◉"
+                            color:   isCurrent ? "#22d3ee" : "#475569"
+                            font.pixelSize: 22
+                        }
+
+                        // Badge compteur (si en cours)
+                        Rectangle {
+                            anchors { top: parent.top; right: parent.right; margins: 3 }
+                            visible: modelData.count > 0 && !modelData.done
+                            width:  cntLbl.implicitWidth + 6; height: 14; radius: 4
+                            color:  "#cc0f172a"
                             Text {
-                                text: modelData.done ? "✓" : (modelData.required ? "●" : "○")
-                                color: modelData.done ? "#22c55e"
-                                     : (modelData.required ? "#f59e0b" : "#64748b")
-                                font.pixelSize: 14
-                            }
-                            Text {
-                                text: modelData.label
-                                color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold
-                                anchors.verticalCenter: parent.verticalCenter
+                                id: cntLbl
+                                anchors.centerIn: parent
+                                text:  modelData.count + "/" + modelData.target
+                                color: "#94a3b8"; font.pixelSize: 8
                             }
                         }
+
+                        // Coche verte (done)
+                        Rectangle {
+                            anchors { top: parent.top; right: parent.right; margins: 3 }
+                            visible: modelData.done
+                            width: 16; height: 16; radius: 8
+                            color: "#22c55e"
+                            Text { anchors.centerIn: parent; text: "✓"; color: "white"; font.pixelSize: 9; font.weight: Font.Bold }
+                        }
+
+                        // Label pose
                         Text {
-                            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
-                            text: modelData.count + " / " + modelData.target
-                            color: "#94a3b8"; font.pixelSize: 11
+                            anchors { bottom: parent.bottom; bottomMargin: 4; horizontalCenter: parent.horizontalCenter }
+                            text:  modelData.label
+                            color: modelData.done ? "#22c55e" : (isCurrent ? "#22d3ee" : "#64748b")
+                            font.pixelSize: 9; font.weight: Font.DemiBold
+                            font.capitalization: Font.AllUppercase
                         }
                     }
                 }
