@@ -87,7 +87,7 @@ Item {
                 id: inputArea
                 anchors.fill: parent
                 hoverEnabled: true
-                onClicked: {
+                onPressed: {
                     if (root.keyboard !== null)
                         root.keyboard.open(root.text, root.isPassword, function(v) { root.text = v })
                 }
