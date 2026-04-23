@@ -230,6 +230,41 @@ Rectangle {
                     active: root.visible && root.state === "live"
                 }
 
+                // Ellipse guide positionnement visage
+                Canvas {
+                    id: faceGuide
+                    anchors.fill: parent
+
+                    property bool inRoi: root.status.in_roi === true
+
+                    Component.onCompleted: requestPaint()
+                    onInRoiChanged:        requestPaint()
+
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+
+                        var cx = width  / 2
+                        var cy = height / 2
+                        var rx = width  * 0.28
+                        var ry = height * 0.42
+                        var k  = 0.5523  // approximation Bézier d'une ellipse
+
+                        ctx.setLineDash(inRoi ? [] : [8, 5])
+                        ctx.lineWidth   = inRoi ? 3 : 2
+                        ctx.strokeStyle = inRoi ? "#22c55e" : "#22d3ee"
+
+                        ctx.beginPath()
+                        ctx.moveTo(cx - rx, cy)
+                        ctx.bezierCurveTo(cx - rx, cy - k*ry, cx - k*rx, cy - ry, cx,      cy - ry)
+                        ctx.bezierCurveTo(cx + k*rx, cy - ry, cx + rx, cy - k*ry, cx + rx, cy)
+                        ctx.bezierCurveTo(cx + rx, cy + k*ry, cx + k*rx, cy + ry, cx,      cy + ry)
+                        ctx.bezierCurveTo(cx - k*rx, cy + ry, cx - rx, cy + k*ry, cx - rx, cy)
+                        ctx.closePath()
+                        ctx.stroke()
+                    }
+                }
+
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
