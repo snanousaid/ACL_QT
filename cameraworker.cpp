@@ -192,7 +192,7 @@ void CameraWorker::run()
         qDebug() << "[CameraWorker] ERREUR : impossible d'ouvrir la caméra";
         return;
     }
-    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter_fourcc('M','J','P','G'));
+    cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M','J','P','G'));
     cap.set(cv::CAP_PROP_FRAME_WIDTH,  CAM_W);
     cap.set(cv::CAP_PROP_FRAME_HEIGHT, CAM_H);
     cap.set(cv::CAP_PROP_FPS,          CAM_FPS);
