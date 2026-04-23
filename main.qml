@@ -16,13 +16,14 @@ Window {
     AppControllerType {
         id: controller
         onAccessEvent: {
-            accessCard.granted    = granted
-            accessCard.personName = name
-            accessCard.source     = source
-            accessCard.score      = score
-            accessCard.door       = door
-            accessCard.timeStr    = time
-            accessCard.visible    = true
+            accessCard.granted      = granted
+            accessCard.personName   = name
+            accessCard.source       = source
+            accessCard.score        = score
+            accessCard.door         = door
+            accessCard.timeStr      = time
+            accessCard.userId       = userId
+            accessCard.visible      = true
         }
     }
 
@@ -136,6 +137,7 @@ Window {
             }
             visible: false
             z: 20
+            imageBaseUrl: controller.controllerUrl
             onDismissed: visible = false
         }
 

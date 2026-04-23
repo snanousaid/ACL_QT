@@ -63,13 +63,18 @@ void AppController::handleEvent(const QJsonObject &data, const QString &source)
     QString name = (fn + ' ' + ln).trimmed();
     if (name.isEmpty()) name = QStringLiteral("Anonyme");
 
+    // userId : depuis "userId" direct ou depuis user.id
+    QString userId = data.value(QStringLiteral("userId")).toString();
+    if (userId.isEmpty())
+        userId = user.value(QStringLiteral("id")).toString();
+
     QString door = data.value(QStringLiteral("doorName")).toString();
     if (door.isEmpty()) door = data.value(QStringLiteral("reader_")).toString();
 
     const double score = data.value(QStringLiteral("score")).toDouble(0.0);
     const QString time = isoToTime(data.value(QStringLiteral("createdAt")).toString());
 
-    emit accessEvent(granted, name, source, score, door, time);
+    emit accessEvent(granted, name, source, score, door, time, userId);
 }
 
 void AppController::onBadgeEvent(const QString &evName, const QJsonObject &data)

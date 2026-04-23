@@ -7,9 +7,10 @@
 class AppController : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(bool badgeConnected READ badgeConnected NOTIFY badgeConnectedChanged)
-    Q_PROPERTY(bool faceConnected  READ faceConnected  NOTIFY faceConnectedChanged)
-    Q_PROPERTY(QString mjpegUrl    READ mjpegUrl       CONSTANT)
+    Q_PROPERTY(bool badgeConnected  READ badgeConnected  NOTIFY badgeConnectedChanged)
+    Q_PROPERTY(bool faceConnected   READ faceConnected   NOTIFY faceConnectedChanged)
+    Q_PROPERTY(QString mjpegUrl     READ mjpegUrl        CONSTANT)
+    Q_PROPERTY(QString controllerUrl READ controllerUrl  CONSTANT)
 
 public:
     explicit AppController(QObject *parent = nullptr);
@@ -17,6 +18,7 @@ public:
     bool    badgeConnected() const { return m_badgeConnected; }
     bool    faceConnected()  const { return m_faceConnected;  }
     QString mjpegUrl()       const { return m_mjpegUrl;       }
+    QString controllerUrl()  const { return m_controllerUrl;  }
 
     Q_INVOKABLE void pauseRecognition();
     Q_INVOKABLE void resumeRecognition();
@@ -50,7 +52,8 @@ signals:
     void badgeConnectedChanged();
     void faceConnectedChanged();
     void accessEvent(bool granted, const QString &name, const QString &source,
-                     double score, const QString &door, const QString &time);
+                     double score, const QString &door, const QString &time,
+                     const QString &userId);
     // Liste reçue : QVariantList de {name, role, created_at, active, dim}
     void faceUsersLoaded(const QVariantList &users);
     // Erreur (réseau ou HTTP non-2xx). msg = description courte.

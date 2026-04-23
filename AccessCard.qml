@@ -3,12 +3,14 @@ import QtQuick 2.10
 Item {
     id: root
 
-    property bool  granted: true
+    property bool   granted: true
     property string personName: ""
-    property string source: "badge"     // "badge" | "face"
+    property string source: "badge"     // "badge" | "face" | "fingerprint"
     property real   score: 0
     property string door: ""
     property string timeStr: ""
+    property string userId: ""
+    property string imageBaseUrl: ""
 
     // Dismiss after 5 s
     signal dismissed
@@ -64,12 +66,27 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: 96; height: 96
                 radius: 48
+                clip: true
                 color: root.granted ? "#1010b981" : "#10e11d48"
                 border.color: root.granted ? "#10b981" : "#e11d48"
                 border.width: 2
 
+                // Photo réelle depuis l'API
+                Image {
+                    id: userPhoto
+                    anchors.fill: parent
+                    source: (root.userId.length > 0 && root.imageBaseUrl.length > 0)
+                            ? (root.imageBaseUrl + "/users/" + root.userId + "/image")
+                            : ""
+                    fillMode: Image.PreserveAspectCrop
+                    visible: status === Image.Ready
+                    asynchronous: true
+                }
+
+                // Initiale — fallback si pas de photo
                 Text {
                     anchors.centerIn: parent
+                    visible: userPhoto.status !== Image.Ready
                     text: root.personName.length > 0
                           ? root.personName.charAt(0).toUpperCase()
                           : "?"
@@ -107,13 +124,14 @@ Item {
                     spacing: 6
 
                     Text {
-                        text: root.source === "face" ? "◉" : "▭"
+                        text: root.source === "face" ? "◉" : (root.source === "fingerprint" ? "⬡" : "▭")
                         color: root.granted ? "#6ee7b7" : "#fca5a5"
                         font.pixelSize: 12
                     }
                     Text {
                         text: {
-                            if (root.source === "face") return "Reconnaissance faciale"
+                            if (root.source === "face")        return "Reconnaissance faciale"
+                            if (root.source === "fingerprint") return "Empreinte digitale"
                             return "Badge"
                         }
                         color: root.granted ? "#6ee7b7" : "#fca5a5"
