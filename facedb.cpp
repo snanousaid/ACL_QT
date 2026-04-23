@@ -78,15 +78,25 @@ float FaceDb::cosine(const QVector<float> &a, const QVector<float> &b)
     return (denom < 1e-9) ? 0.0f : static_cast<float>(dot / denom);
 }
 
-QString FaceDb::match(const QVector<float> &emb, float threshold, float *scoreOut) const
+QString FaceDb::match(const QVector<float> &emb, float threshold,
+                      float *scoreOut, bool *activeOut) const
 {
     QString bestName;
-    float   bestScore = -1.0f;
+    float   bestScore  = -1.0f;
+    bool    bestActive = true;
+
+    // Scanne tous les utilisateurs (actifs ET inactifs) pour distinguer
+    // "inconnu" (score < seuil) de "désactivé" (score >= seuil + active=false).
     for (auto it = m_db.constBegin(); it != m_db.constEnd(); ++it) {
-        if (!it.value().active) continue;
         float s = cosine(emb, it.value().embedding);
-        if (s > bestScore) { bestScore = s; bestName = it.key(); }
+        if (s > bestScore) {
+            bestScore  = s;
+            bestName   = it.key();
+            bestActive = it.value().active;
+        }
     }
-    if (scoreOut) *scoreOut = bestScore;
+
+    if (scoreOut)  *scoreOut  = (bestScore >= 0.0f) ? bestScore : 0.0f;
+    if (activeOut) *activeOut = bestActive;
     return (bestScore >= threshold) ? bestName : QString();
 }

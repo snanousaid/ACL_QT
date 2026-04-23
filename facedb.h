@@ -25,9 +25,12 @@ public:
     void remove   (const QString &name);
     void setActive(const QString &name, bool active);
 
-    // Retourne le nom du meilleur match (ou "" si sous le seuil)
+    // Retourne le nom du meilleur match (ou "" si sous le seuil).
+    // activeOut : vrai si l'utilisateur trouvé est actif (valide seulement si nom != "").
+    // Scanne TOUS les utilisateurs (actifs + inactifs) pour distinguer
+    // "inconnu" (score bas) de "désactivé" (score haut + active=false).
     QString match(const QVector<float> &emb, float threshold,
-                  float *scoreOut = nullptr) const;
+                  float *scoreOut = nullptr, bool *activeOut = nullptr) const;
 
     QList<QPair<QString, FaceEntry>> entries() const;
 

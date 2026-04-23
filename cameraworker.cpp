@@ -42,13 +42,24 @@ static float frameBrightness(const cv::Mat &frame)
     return static_cast<float>(cv::mean(hsv)[2]);
 }
 
+// Retourne vrai si ≥70% de la surface du visage est dans la ROI (normalisée 0‥1).
+// Tolère un léger dépassement du menton / front / joues, comme Python.
 static bool faceInRoi(const cv::Mat &face, int fw, int fh,
                       float rx, float ry, float rw, float rh)
 {
-    float cx = face.at<float>(0, 0) + face.at<float>(0, 2) * 0.5f;
-    float cy = face.at<float>(0, 1) + face.at<float>(0, 3) * 0.5f;
-    return cx >= rx * fw && cx <= (rx + rw) * fw
-        && cy >= ry * fh && cy <= (ry + rh) * fh;
+    float left   =  face.at<float>(0, 0)                       / fw;
+    float top    =  face.at<float>(0, 1)                       / fh;
+    float right  = (face.at<float>(0, 0) + face.at<float>(0, 2)) / fw;
+    float bottom = (face.at<float>(0, 1) + face.at<float>(0, 3)) / fh;
+
+    float roiRight  = rx + rw;
+    float roiBottom = ry + rh;
+
+    float interW = std::max(0.0f, std::min(right,  roiRight)  - std::max(left, rx));
+    float interH = std::max(0.0f, std::min(bottom, roiBottom) - std::max(top,  ry));
+    float interArea = interW * interH;
+    float faceArea  = std::max(1e-9f, (right - left) * (bottom - top));
+    return (interArea / faceArea) >= 0.70f;
 }
 
 static int bestFaceIdx(const cv::Mat &faces)
@@ -116,6 +127,7 @@ void CameraWorker::startEnroll(const QString &name, const QString &role, int sam
     m_enrollSamplesTarget   = qMax(1, samplesPerPose);
     m_enrollSamples.clear();
     m_enrollFinalizeRequested = false;
+    m_enrollLastSampleMs      = 0;
     m_mode = Enrolling;
     qDebug() << "[CameraWorker] enrollment démarré pour" << name;
 }
@@ -283,12 +295,24 @@ void CameraWorker::run()
 
                 if (currentMode == Enrolling) {
                     // ── Mode enrôlement ─────────────────────────────────────────
+                    // Filtres qualité (comme Python) :
+                    // score YuNet (colonne 14) et largeur visage (colonne 2)
+                    float yunetScore = best.at<float>(0, 14);
+                    float faceWidth  = best.at<float>(0, 2);
+                    qint64 nowMs     = QDateTime::currentMSecsSinceEpoch();
+
+                    if (yunetScore < ENROLL_MIN_SCORE || faceWidth < ENROLL_MIN_WIDTH
+                            || (nowMs - m_enrollLastSampleMs) < ENROLL_INTERVAL_MS)
+                        goto emit_frame; // qualité insuffisante ou trop rapide
+
+                    {
                     bool finalizeNow = false;
                     QString enrollName, enrollRole;
                     int samplesTarget, samplesCount;
 
                     {
                         QMutexLocker l(&m_mutex);
+                        m_enrollLastSampleMs = nowMs;
                         m_enrollSamples.append(emb);
                         samplesCount  = m_enrollSamples.size();
                         samplesTarget = m_enrollSamplesTarget;
@@ -337,28 +361,37 @@ void CameraWorker::run()
                         }
                     }
 
+                    } // fin bloc qualité enrôlement
+
                 } else {
                     // ── Mode détection — match + événement ─────────────────────
-                    float   score    = 0.0f;
+                    float   score  = 0.0f;
+                    bool    active = true;
                     QString name;
                     {
                         QMutexLocker l(&m_mutex);
-                        name = m_db.match(emb, MATCH_THRESH, &score);
+                        name = m_db.match(emb, MATCH_THRESH, &score, &active);
                     }
-                    matched = !name.isEmpty();
+                    // name vide  → inconnu (score < seuil) → silencieux
+                    // name + active   → accordé
+                    // name + !active  → utilisateur désactivé → denied (avec son nom)
+                    matched = !name.isEmpty() && active;
 
-                    qint64 now      = QDateTime::currentMSecsSinceEpoch();
-                    bool   cooldown = (now - lastEventMs > COOLDOWN_MS)
-                                   || (name != lastEventName);
-
-                    if (cooldown) {
-                        lastEventMs   = now;
-                        lastEventName = name;
-                        if (matched)
-                            emit accessGranted(name, score);
-                        else
-                            emit accessDenied(QStringLiteral("unknown"), score);
+                    if (!name.isEmpty()) {
+                        // Un utilisateur reconnu (actif ou désactivé)
+                        qint64 now      = QDateTime::currentMSecsSinceEpoch();
+                        bool   cooldown = (now - lastEventMs > COOLDOWN_MS)
+                                       || (name != lastEventName);
+                        if (cooldown) {
+                            lastEventMs   = now;
+                            lastEventName = name;
+                            if (active)
+                                emit accessGranted(name, score);
+                            else
+                                emit accessDenied(name, score); // désactivé
+                        }
                     }
+                    // Inconnu (name vide) → silencieux, aucun événement
                 }
             }
         }
