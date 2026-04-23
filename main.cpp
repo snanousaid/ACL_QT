@@ -28,8 +28,11 @@ int main(int argc, char *argv[])
 
     // ── Image provider caméra C++ ─────────────────────────────────────────────
     CameraImgProvider *imgProvider = new CameraImgProvider();
-    QObject::connect(ctrl, &AppController::frameReady,
-                     imgProvider, &CameraImgProvider::updateFrame,
+    // CameraImgProvider n'est pas un QObject — connexion via lambda (thread-safe via mutex interne)
+    QObject::connect(ctrl, &AppController::frameReady, ctrl,
+                     [imgProvider](const QImage &img) {
+                         imgProvider->updateFrame(img);
+                     },
                      Qt::QueuedConnection);
 
     qmlRegisterType<MjpegItem>("ACL", 1, 0, "MjpegItem");

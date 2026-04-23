@@ -2,8 +2,7 @@
 #include <QMutexLocker>
 
 CameraImgProvider::CameraImgProvider()
-    : QObject(nullptr)
-    , QQuickImageProvider(QQuickImageProvider::Image)
+    : QQuickImageProvider(QQuickImageProvider::Image)
 {}
 
 QImage CameraImgProvider::requestImage(const QString &, QSize *size,
