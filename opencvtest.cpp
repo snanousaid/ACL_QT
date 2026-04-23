@@ -33,22 +33,23 @@ QString runOpenCvTest(const QString &modelsDir)
     cv::Ptr<cv::FaceDetectorYN> detector;
     try {
         detector = cv::FaceDetectorYN::create(yunet, "", {frame.cols, frame.rows});
+        cv::Mat faces;
+        detector->detect(frame, faces);
+        qDebug() << "[OpenCV] YuNet ok — visages détectés:" << faces.rows;
     } catch (const cv::Exception &e) {
+        qDebug() << "[OpenCV] YuNet FAIL (modèle incompatible OpenCV 4.5.4?):" << e.what();
         return QStringLiteral("FAIL: YuNet — ") + QString::fromStdString(e.what());
     }
-    cv::Mat faces;
-    detector->detect(frame, faces);
-    qDebug() << "[OpenCV] YuNet ok — visages détectés:" << faces.rows;
 
     // ── 4. SFace (reconnaissance) ─────────────────────────────────────────
     std::string sface = (modelsDir + "/face_recognition_sface_2021dec.onnx").toStdString();
     cv::Ptr<cv::FaceRecognizerSF> recognizer;
     try {
         recognizer = cv::FaceRecognizerSF::create(sface, "");
+        qDebug() << "[OpenCV] SFace ok";
     } catch (const cv::Exception &e) {
         return QStringLiteral("FAIL: SFace — ") + QString::fromStdString(e.what());
     }
-    qDebug() << "[OpenCV] SFace ok";
 
     return QStringLiteral("OK: OpenCV %1 | camera %2x%3 | YuNet ok | SFace ok")
                .arg(version)
