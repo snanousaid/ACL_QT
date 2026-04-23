@@ -4,10 +4,13 @@ CONFIG += c++11
 DEFINES += QT_DEPRECATED_WARNINGS
 
 # ── OpenCV (A133 Linux uniquement) ────────────────────────────────────────
-linux {
+packagesExist(opencv4) {
     CONFIG += link_pkgconfig
     PKGCONFIG += opencv4
     DEFINES += ACL_OPENCV_ENABLED
+    message("OpenCV 4 trouvé — face detection activée")
+} else {
+    message("OpenCV 4 non trouvé — face detection désactivée (VM/Windows)")
 }
 
 SOURCES += \
