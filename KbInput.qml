@@ -1,25 +1,18 @@
 import QtQuick 2.10
 
-// Touch-friendly input field that opens VirtualKeyboard on tap.
-// Usage:
-//   KbInput {
-//       keyboard:    keyboard          // VirtualKeyboard id from parent
-//       text:        myVar
-//       onTextChanged: myVar = text
-//       isPassword:  false
-//       placeholder: "Entrez une valeur"
-//       label:       "Nom"
-//   }
+// Champ de saisie tactile — utilise Qt Virtual Keyboard (TextInput natif).
+// API maintenue compatible avec l'ancienne version :
+//   property text, isPassword, placeholder, label, keyboard (ignoré)
 Item {
     id: root
     height: col.implicitHeight
-    width: 200  // override in usage
+    width: 200
 
-    property var    keyboard:    null
-    property string text:        ""
+    property alias text:        inputField.text
     property bool   isPassword:  false
     property string placeholder: ""
     property string label:       ""
+    property var    keyboard:    null   // ignoré — Qt VKB gère le focus automatiquement
 
     Column {
         id: col
@@ -28,8 +21,8 @@ Item {
 
         Text {
             visible: root.label.length > 0
-            text: root.label
-            color: "#64748b"
+            text:    root.label
+            color:   "#64748b"
             font.pixelSize: 12
         }
 
@@ -37,59 +30,32 @@ Item {
             width:  parent.width
             height: 38
             radius: 8
-            color: "#1e293b"
-            border.color: inputArea.containsMouse ? "#3b82f6" : "#475569"
+            color:  "#1e293b"
+            border.color: inputField.activeFocus ? "#3b82f6" : "#475569"
             border.width: 1
 
-            Row {
+            TextInput {
+                id: inputField
                 anchors { fill: parent; leftMargin: 12; rightMargin: 8 }
-                spacing: 6
+                verticalAlignment: TextInput.AlignVCenter
+                color:       "white"
+                font.pixelSize: 14
+                font.family: "monospace"
+                echoMode:    root.isPassword ? TextInput.Password : TextInput.Normal
+                activeFocusOnPress: true
+                inputMethodHints:   root.isPassword
+                                    ? Qt.ImhHiddenText | Qt.ImhNoPredictiveText
+                                    : Qt.ImhNone
 
+                // Placeholder
                 Text {
-                    width: parent.width - (cursor.visible ? cursor.width + 6 : 0)
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: {
-                        if (root.text.length === 0) return ""
-                        return root.isPassword ? "•".repeat(root.text.length) : root.text
-                    }
-                    color: "white"
+                    anchors { fill: parent; leftMargin: 0 }
+                    visible: inputField.text.length === 0
+                    text:    root.placeholder
+                    color:   "#475569"
                     font.pixelSize: 14
-                    font.family: "monospace"
-                    elide: Text.ElideRight
+                    font.family:    "monospace"
                     verticalAlignment: Text.AlignVCenter
-                    // placeholder
-                    Text {
-                        anchors.fill: parent
-                        visible: root.text.length === 0
-                        text: root.placeholder
-                        color: "#475569"
-                        font.pixelSize: 14
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
-
-                Rectangle {
-                    id: cursor
-                    width: 2; height: 18
-                    color: "#3b82f6"
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: root.keyboard !== null && root.keyboard.visible
-
-                    SequentialAnimation on opacity {
-                        running: cursor.visible; loops: Animation.Infinite
-                        NumberAnimation { from: 1; to: 0; duration: 500 }
-                        NumberAnimation { from: 0; to: 1; duration: 500 }
-                    }
-                }
-            }
-
-            MouseArea {
-                id: inputArea
-                anchors.fill: parent
-                hoverEnabled: true
-                onPressed: {
-                    if (root.keyboard !== null)
-                        root.keyboard.open(root.text, root.isPassword, function(v) { root.text = v })
                 }
             }
         }

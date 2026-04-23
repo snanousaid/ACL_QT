@@ -1,5 +1,6 @@
 import QtQuick 2.10
 import QtQuick.Window 2.10
+import QtQuick.VirtualKeyboard 2.3
 import ACL 1.0
 
 Window {
@@ -349,7 +350,20 @@ Window {
             onClosed: { faceSettings.open() }   // retour à la liste
         }
 
-        // ── Virtual keyboard (shared, z:60) ───────────────────────────────────
-        VirtualKeyboard { id: keyboard }
+        // ── Qt Virtual Keyboard ───────────────────────────────────────────────
+        // Wrapper Item pour maintenir l'API keyboard.close() utilisée partout.
+        Item {
+            id: keyboard
+            anchors.fill: parent
+            z: 999
+            visible: Qt.inputMethod.visible
+
+            function close() { Qt.inputMethod.hide() }
+
+            InputPanel {
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                visible: Qt.inputMethod.visible
+            }
+        }
     }
 }

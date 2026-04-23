@@ -1,4 +1,4 @@
-QT += quick network websockets
+QT += quick network websockets virtualkeyboard
 CONFIG += c++11
 
 DEFINES += QT_DEPRECATED_WARNINGS

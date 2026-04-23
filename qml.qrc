@@ -4,7 +4,6 @@
         <file>IdleScreen.qml</file>
         <file>AccessCard.qml</file>
         <file>StatusBar.qml</file>
-        <file>VirtualKeyboard.qml</file>
         <file>KbInput.qml</file>
         <file>AdminMenu.qml</file>
         <file>FaceSettingsModal.qml</file>
