@@ -1,6 +1,8 @@
 #include "opencvtest.h"
 #include <QDebug>
 
+#ifdef ACL_OPENCV_ENABLED
+
 #include <opencv2/core.hpp>
 #include <opencv2/videoio.hpp>
 #include <opencv2/objdetect.hpp>
@@ -52,3 +54,12 @@ QString runOpenCvTest(const QString &modelsDir)
                .arg(version)
                .arg(frame.cols).arg(frame.rows);
 }
+
+#else
+
+QString runOpenCvTest(const QString &)
+{
+    return QStringLiteral("OpenCV désactivé (Windows build)");
+}
+
+#endif

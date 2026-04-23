@@ -3,10 +3,11 @@ CONFIG += c++11
 
 DEFINES += QT_DEPRECATED_WARNINGS
 
-# ── OpenCV (A133 Linux via pkg-config) ────────────────────────────────────
+# ── OpenCV (A133 Linux uniquement) ────────────────────────────────────────
 unix {
     CONFIG += link_pkgconfig
     PKGCONFIG += opencv4
+    DEFINES += ACL_OPENCV_ENABLED
 }
 
 SOURCES += \
