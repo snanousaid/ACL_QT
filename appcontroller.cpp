@@ -53,38 +53,80 @@ static QString isoToTime(const QString &iso)
 
 void AppController::handleEvent(const QJsonObject &data, const QString &source)
 {
-    const bool granted = data.value(QStringLiteral("status")).toBool() ||
-                         data.value(QStringLiteral("eventType")).toString()
-                             == QStringLiteral("ACCESS_GRANTED");
+    // ── Accordé : status booléen, eventType ou event_type (snake/camel) ──────
+    bool granted = data.value(QStringLiteral("status")).toBool();
+    if (!granted) {
+        const QString evType  = data.value(QStringLiteral("eventType")).toString();
+        const QString evType2 = data.value(QStringLiteral("event_type")).toString();
+        const QString status  = data.value(QStringLiteral("status")).toString().toUpper();
+        granted = evType  == QStringLiteral("ACCESS_GRANTED") ||
+                  evType2 == QStringLiteral("ACCESS_GRANTED") ||
+                  status  == QStringLiteral("ACCESS_GRANTED") ||
+                  status  == QStringLiteral("GRANTED");
+    }
 
+    // ── Nom : essaie plusieurs chemins possibles ───────────────────────────────
     const QJsonObject user = data.value(QStringLiteral("user")).toObject();
-    QString fn = user.value(QStringLiteral("first_name")).toString().trimmed();
-    QString ln = user.value(QStringLiteral("last_name")).toString().trimmed();
-    QString name = (fn + ' ' + ln).trimmed();
+    QString name;
+
+    // 1) user.first_name + user.last_name
+    {
+        QString fn = user.value(QStringLiteral("first_name")).toString().trimmed();
+        QString ln = user.value(QStringLiteral("last_name")).toString().trimmed();
+        name = (fn + ' ' + ln).trimmed();
+    }
+    // 2) user.firstName + user.lastName (camelCase)
+    if (name.isEmpty()) {
+        QString fn = user.value(QStringLiteral("firstName")).toString().trimmed();
+        QString ln = user.value(QStringLiteral("lastName")).toString().trimmed();
+        name = (fn + ' ' + ln).trimmed();
+    }
+    // 3) user.name ou user.fullName
+    if (name.isEmpty()) name = user.value(QStringLiteral("name")).toString().trimmed();
+    if (name.isEmpty()) name = user.value(QStringLiteral("fullName")).toString().trimmed();
+    if (name.isEmpty()) name = user.value(QStringLiteral("full_name")).toString().trimmed();
+    // 4) champs à la racine de data
+    if (name.isEmpty()) {
+        QString fn = data.value(QStringLiteral("first_name")).toString().trimmed();
+        QString ln = data.value(QStringLiteral("last_name")).toString().trimmed();
+        name = (fn + ' ' + ln).trimmed();
+    }
+    if (name.isEmpty()) name = data.value(QStringLiteral("name")).toString().trimmed();
     if (name.isEmpty()) name = QStringLiteral("Anonyme");
 
-    // userId : depuis "userId" direct ou depuis user.id
+    // ── userId ────────────────────────────────────────────────────────────────
     QString userId = data.value(QStringLiteral("userId")).toString();
-    if (userId.isEmpty())
-        userId = user.value(QStringLiteral("id")).toString();
+    if (userId.isEmpty()) userId = user.value(QStringLiteral("id")).toString();
 
+    // ── Porte ─────────────────────────────────────────────────────────────────
     QString door = data.value(QStringLiteral("doorName")).toString();
+    if (door.isEmpty()) door = data.value(QStringLiteral("readerName")).toString();
     if (door.isEmpty()) door = data.value(QStringLiteral("reader_")).toString();
 
-    const double score = data.value(QStringLiteral("score")).toDouble(0.0);
-    const QString time = isoToTime(data.value(QStringLiteral("createdAt")).toString());
+    const double  score = data.value(QStringLiteral("score")).toDouble(0.0);
+    const QString time  = isoToTime(data.value(QStringLiteral("createdAt")).toString());
+
+    qDebug() << "[ACL]" << source << "granted=" << granted
+             << "name=" << name << "door=" << door << "userId=" << userId;
 
     emit accessEvent(granted, name, source, score, door, time, userId);
 }
 
 void AppController::onBadgeEvent(const QString &evName, const QJsonObject &data)
 {
-    if (evName == QStringLiteral("event"))
+    qDebug() << "[ACL badge socket] event name:" << evName
+             << "keys:" << data.keys();
+    // Accepte "event" (standard) + noms alternatifs courants
+    if (evName == QStringLiteral("event")         ||
+        evName == QStringLiteral("access")        ||
+        evName == QStringLiteral("access_event")  ||
+        evName == QStringLiteral("badge_event"))
         handleEvent(data, QStringLiteral("badge"));
 }
 
 void AppController::onFaceEvent(const QString &evName, const QJsonObject &data)
 {
+    qDebug() << "[ACL face socket] event name:" << evName;
     if (evName == QStringLiteral("event"))
         handleEvent(data, QStringLiteral("face"));
 }
