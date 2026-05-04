@@ -173,78 +173,63 @@ Window {
         }
 
         // ── Bouton Settings flottant (apparaît temporairement après tap-tap) ──
-        Item {
+        Rectangle {
             id: settingsBtn
             visible: false
             z: 30
-            width: 56; height: 56
+            width: 56; height: 56; radius: 28
             anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 18 }
+            color: settingsMA.pressed ? "#1d4ed8" : "#2563eb"
+            border.color: "#60a5fa"; border.width: 2
 
-            // Halo pulsant
+            // Pulse halo derrière le bouton (purement visuel, pas d'interaction)
             Rectangle {
+                z: -1
                 anchors.centerIn: parent
-                width:  72; height: 72; radius: 36
-                color:  "#3b82f622"
+                width:  parent.width  + 16
+                height: parent.height + 16
+                radius: width / 2
+                color: "transparent"
                 border.color: "#3b82f6"; border.width: 1
-                opacity: 0.6
+                opacity: 0.5
                 SequentialAnimation on opacity {
                     loops: Animation.Infinite; running: settingsBtn.visible
-                    NumberAnimation { from: 0.6; to: 0.15; duration: 1000; easing.type: Easing.InOutSine }
-                    NumberAnimation { from: 0.15; to: 0.6; duration: 1000; easing.type: Easing.InOutSine }
+                    NumberAnimation { from: 0.5; to: 0.0; duration: 1200; easing.type: Easing.OutQuad }
+                    PauseAnimation  { duration: 100 }
                 }
             }
 
-            // Bouton principal
-            Rectangle {
-                id: settingsCircle
-                anchors.fill: parent
-                radius: 28
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: settingsMA.pressed ? "#1d4ed8" : "#2563eb" }
-                    GradientStop { position: 1.0; color: settingsMA.pressed ? "#0f172a" : "#1e293b" }
-                }
-                border.color: "#3b82f6"; border.width: 1.5
-
-                // Engrenage en Canvas (plus net que l'emoji)
-                Canvas {
-                    anchors.centerIn: parent
-                    width: 26; height: 26
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.clearRect(0, 0, width, height)
-                        ctx.strokeStyle = "white"
-                        ctx.fillStyle   = "white"
-                        ctx.lineWidth   = 1.5
-                        ctx.lineJoin    = "round"
-                        var cx = 13, cy = 13, r = 9, rIn = 4.5, n = 8
-                        ctx.beginPath()
-                        for (var i = 0; i < n * 2; i++) {
-                            var a   = (Math.PI * 2 * i) / (n * 2) - Math.PI / 2
-                            var rad = (i % 2 === 0) ? r : r - 2
-                            var x   = cx + rad * Math.cos(a)
-                            var y   = cy + rad * Math.sin(a)
-                            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
-                        }
-                        ctx.closePath()
-                        ctx.stroke()
-                        ctx.beginPath(); ctx.arc(cx, cy, rIn, 0, Math.PI * 2); ctx.stroke()
-                        ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill()
+            // Engrenage en Canvas
+            Canvas {
+                anchors.centerIn: parent
+                width: 26; height: 26
+                onPaint: {
+                    var ctx = getContext("2d")
+                    ctx.clearRect(0, 0, width, height)
+                    ctx.strokeStyle = "white"
+                    ctx.fillStyle   = "white"
+                    ctx.lineWidth   = 1.6
+                    ctx.lineJoin    = "round"
+                    var cx = 13, cy = 13, r = 9, rIn = 4.5, n = 8
+                    ctx.beginPath()
+                    for (var i = 0; i < n * 2; i++) {
+                        var a   = (Math.PI * 2 * i) / (n * 2) - Math.PI / 2
+                        var rad = (i % 2 === 0) ? r : r - 2.2
+                        var x   = cx + rad * Math.cos(a)
+                        var y   = cy + rad * Math.sin(a)
+                        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
                     }
+                    ctx.closePath()
+                    ctx.stroke()
+                    ctx.beginPath(); ctx.arc(cx, cy, rIn, 0, Math.PI * 2); ctx.stroke()
+                    ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill()
                 }
-            }
-
-            // Petit indicateur "admin"
-            Rectangle {
-                anchors { right: parent.right; bottom: parent.bottom; rightMargin: -2; bottomMargin: -2 }
-                width: 18; height: 18; radius: 9
-                color: "#0f172a"; border.color: "#3b82f6"; border.width: 1
-                Text { anchors.centerIn: parent; text: "🔒"; font.pixelSize: 9 }
             }
 
             MouseArea {
                 id: settingsMA
                 anchors.fill: parent
-                onClicked: {
+                onPressed: {
                     settingsBtn.visible = false
                     passwordModal.visible = true
                     root.adminVisible = true
