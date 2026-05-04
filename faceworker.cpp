@@ -7,6 +7,25 @@
 #include <QMutexLocker>
 #include <QThread>
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Poses
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+    const QStringList REQUIRED_POSES = { "center", "left", "right" };
+    const QStringList OPTIONAL_POSES = { "up", "down" };
+    const QStringList ACTIVE_POSES   = { "center", "left", "right", "up", "down" };
+
+    QString poseLabel(const QString &id)
+    {
+        if (id == "center") return QStringLiteral("Face caméra");
+        if (id == "left")   return QStringLiteral("Tourner à gauche");
+        if (id == "right")  return QStringLiteral("Tourner à droite");
+        if (id == "up")     return QStringLiteral("Lever la tête");
+        if (id == "down")   return QStringLiteral("Baisser la tête");
+        return id;
+    }
+}
+
 #ifndef ACL_OPENCV_ENABLED
 // ── Stub Windows / sans OpenCV ────────────────────────────────────────────────
 
@@ -23,6 +42,9 @@ void FaceWorker::reloadDb()       {}
 QVariantList FaceWorker::listUsers() const { return {}; }
 void FaceWorker::toggleUser(const QString &) {}
 void FaceWorker::deleteUser(const QString &) {}
+QString FaceWorker::nextPoseToFill_locked() const { return QString(); }
+bool    FaceWorker::allRequiredDone_locked() const { return false; }
+QVariantMap FaceWorker::buildEnrollStatus_locked(bool) const { return {}; }
 
 void FaceWorker::run()
 {
@@ -97,6 +119,33 @@ static QVector<float> meanEmbedding(const QVector<QVector<float>> &samples)
     return mean;
 }
 
+// Estime la pose (center / left / right / up / down / transition) depuis les
+// 5 landmarks YuNet (yeux droit/gauche, nez, coins de bouche).
+//   Ordre YuNet : [x,y,w,h, rex,rey, lex,ley, nx,ny, rmx,rmy, lmx,lmy, score]
+static QString estimatePose(const cv::Mat &face)
+{
+    float rex = face.at<float>(0, 4),  rey = face.at<float>(0, 5);
+    float lex = face.at<float>(0, 6),  ley = face.at<float>(0, 7);
+    float nx  = face.at<float>(0, 8),  ny  = face.at<float>(0, 9);
+    float rmy = face.at<float>(0, 11), lmy = face.at<float>(0, 13);
+
+    float eye_cx   = (rex + lex) / 2.0f;
+    float eye_cy   = (rey + ley) / 2.0f;
+    float mouth_cy = (rmy + lmy) / 2.0f;
+    float inter_eye = std::max(std::abs(lex - rex), 1.0f);
+
+    float yaw = (nx - eye_cx) / inter_eye;
+    float em  = mouth_cy - eye_cy;
+    float pitch = (em > 1.0f) ? ((ny - eye_cy) / em - 0.5f) : 0.0f;
+
+    if (std::abs(yaw) < 0.18f && std::abs(pitch) < 0.07f) return QStringLiteral("center");
+    if (yaw < -0.30f && std::abs(pitch) < 0.20f)          return QStringLiteral("left");
+    if (yaw >  0.30f && std::abs(pitch) < 0.20f)          return QStringLiteral("right");
+    if (pitch < -0.06f && std::abs(yaw) < 0.30f)          return QStringLiteral("up");
+    if (pitch >  0.08f && std::abs(yaw) < 0.30f)          return QStringLiteral("down");
+    return QStringLiteral("transition");
+}
+
 // ── Constructeur / Destructeur ────────────────────────────────────────────────
 
 FaceWorker::FaceWorker(FrameQueue *queue,
@@ -116,7 +165,7 @@ FaceWorker::~FaceWorker()
     wait();
 }
 
-// ── Contrôle (thread-safe) ────────────────────────────────────────────────────
+// ── Contrôle ──────────────────────────────────────────────────────────────────
 
 void FaceWorker::stop()   { m_running.store(0); }
 void FaceWorker::pause()  { QMutexLocker l(&m_mutex); m_mode = Paused; }
@@ -128,11 +177,15 @@ void FaceWorker::startEnroll(const QString &name, const QString &role, int sampl
     m_enrollName              = name;
     m_enrollRole              = role;
     m_enrollSamplesTarget     = qMax(1, samplesPerPose);
-    m_enrollSamples.clear();
+    m_enrollBins.clear();
+    for (const QString &p : ACTIVE_POSES) m_enrollBins.insert(p, {});
+    m_enrollCurrentPose       = QStringLiteral("transition");
+    m_enrollLastMsg           = QString();
     m_enrollFinalizeRequested = false;
     m_enrollLastSampleMs      = 0;
     m_mode                    = Enrolling;
-    qDebug() << "[FaceWorker] enrollment démarré pour" << name;
+    qDebug() << "[FaceWorker] enrollment démarré pour" << name
+             << "—" << samplesPerPose << "samples/pose";
 }
 
 void FaceWorker::finalizeEnroll()
@@ -144,7 +197,7 @@ void FaceWorker::finalizeEnroll()
 void FaceWorker::cancelEnroll()
 {
     QMutexLocker l(&m_mutex);
-    m_enrollSamples.clear();
+    m_enrollBins.clear();
     m_enrollFinalizeRequested = false;
     m_mode = Detecting;
     qDebug() << "[FaceWorker] enrollment annulé";
@@ -157,7 +210,7 @@ void FaceWorker::reloadDb()
     qDebug() << "[FaceWorker] DB rechargée —" << m_db.count() << "utilisateurs";
 }
 
-// ── Gestion DB ────────────────────────────────────────────────────────────────
+// ── DB ────────────────────────────────────────────────────────────────────────
 
 QVariantList FaceWorker::listUsers() const
 {
@@ -194,11 +247,58 @@ void FaceWorker::deleteUser(const QString &name)
     m_db.save(m_dbPath);
 }
 
+// ── Helpers enrôlement (mutex tenu) ───────────────────────────────────────────
+
+QString FaceWorker::nextPoseToFill_locked() const
+{
+    for (const QString &p : REQUIRED_POSES) {
+        if (m_enrollBins.value(p).size() < m_enrollSamplesTarget) return p;
+    }
+    for (const QString &p : OPTIONAL_POSES) {
+        if (m_enrollBins.value(p).size() < m_enrollSamplesTarget) return p;
+    }
+    return QString();
+}
+
+bool FaceWorker::allRequiredDone_locked() const
+{
+    for (const QString &p : REQUIRED_POSES) {
+        if (m_enrollBins.value(p).size() < m_enrollSamplesTarget) return false;
+    }
+    return true;
+}
+
+QVariantMap FaceWorker::buildEnrollStatus_locked(bool inRoi) const
+{
+    QVariantMap status;
+    status[QStringLiteral("in_roi")]       = inRoi;
+    status[QStringLiteral("phase")]        = QStringLiteral("enrolling");
+    status[QStringLiteral("enroll_msg")]   = m_enrollLastMsg;
+    status[QStringLiteral("enroll_name")]  = m_enrollName;
+    status[QStringLiteral("enroll_current_pose")] = m_enrollCurrentPose;
+    status[QStringLiteral("enroll_next")]  = nextPoseToFill_locked();
+    status[QStringLiteral("enroll_complete")] = allRequiredDone_locked();
+
+    QVariantList poses;
+    for (const QString &p : ACTIVE_POSES) {
+        QVariantMap pose;
+        pose[QStringLiteral("id")]       = p;
+        pose[QStringLiteral("label")]    = poseLabel(p);
+        pose[QStringLiteral("count")]    = m_enrollBins.value(p).size();
+        pose[QStringLiteral("target")]   = m_enrollSamplesTarget;
+        pose[QStringLiteral("done")]     = m_enrollBins.value(p).size() >= m_enrollSamplesTarget;
+        pose[QStringLiteral("required")] = REQUIRED_POSES.contains(p);
+        poses.append(pose);
+    }
+    status[QStringLiteral("enroll_poses")] = poses;
+    return status;
+}
+
 // ── Boucle principale ─────────────────────────────────────────────────────────
 
 void FaceWorker::run()
 {
-    qDebug() << "[FaceWorker] démarrage — détection + reconnaissance (étape 2)";
+    qDebug() << "[FaceWorker] démarrage — détection + reconnaissance + enrôlement multi-poses";
 
     if (!m_queue) {
         qDebug() << "[FaceWorker] ERREUR : pas de FrameQueue";
@@ -261,7 +361,6 @@ void FaceWorker::run()
                               ROI_X, ROI_Y, ROI_W, ROI_H);
 
             if (inRoi) {
-                // ── Extraction embedding ────────────────────────────────────────
                 QVector<float> emb;
                 try {
                     recognizer->alignCrop(frame, best, aligned);
@@ -274,67 +373,104 @@ void FaceWorker::run()
                 }
 
                 if (currentMode == Enrolling) {
-                    // ── Mode enrôlement ─────────────────────────────────────────
+                    // ── Mode enrôlement multi-pose ─────────────────────────────
                     float yunetScore = best.at<float>(0, 14);
                     float faceWidth  = best.at<float>(0, 2);
                     qint64 nowMs     = QDateTime::currentMSecsSinceEpoch();
 
-                    if (yunetScore < ENROLL_MIN_SCORE || faceWidth < ENROLL_MIN_WIDTH
-                            || (nowMs - m_enrollLastSampleMs) < ENROLL_INTERVAL_MS) {
-                        emit faceStatusChanged(hasFace, inRoi, false);
-                        continue;
-                    }
+                    QString pose = estimatePose(best);
 
                     bool finalizeNow = false;
+                    bool requiredDone = false;
                     QString enrollName, enrollRole;
-                    int samplesTarget, samplesCount;
+                    QMap<QString, QVector<QVector<float>>> binsCopy;
+                    QVariantMap statusMap;
 
                     {
                         QMutexLocker l(&m_mutex);
-                        m_enrollLastSampleMs = nowMs;
-                        m_enrollSamples.append(emb);
-                        samplesCount  = m_enrollSamples.size();
-                        samplesTarget = m_enrollSamplesTarget;
+                        m_enrollCurrentPose = pose;
+
+                        // Filtres qualité
+                        if (yunetScore < ENROLL_MIN_SCORE) {
+                            m_enrollLastMsg = QStringLiteral("score trop faible");
+                        } else if (faceWidth < ENROLL_MIN_WIDTH) {
+                            m_enrollLastMsg = QStringLiteral("trop loin");
+                        } else if ((nowMs - m_enrollLastSampleMs) < ENROLL_INTERVAL_MS) {
+                            // trop rapide, pas de message
+                        } else if (pose == "transition" || !ACTIVE_POSES.contains(pose)) {
+                            m_enrollLastMsg = QStringLiteral("pose intermédiaire");
+                        } else {
+                            QVector<QVector<float>> &bucket = m_enrollBins[pose];
+                            if (bucket.size() >= m_enrollSamplesTarget) {
+                                m_enrollLastMsg = QStringLiteral("pose '%1' complète")
+                                                  .arg(poseLabel(pose));
+                            } else {
+                                bucket.append(emb);
+                                m_enrollLastSampleMs = nowMs;
+                                m_enrollLastMsg = QStringLiteral("+1 %1 (%2/%3)")
+                                                  .arg(pose)
+                                                  .arg(bucket.size())
+                                                  .arg(m_enrollSamplesTarget);
+                            }
+                        }
+
+                        statusMap     = buildEnrollStatus_locked(true);
+                        finalizeNow   = m_enrollFinalizeRequested;
+                        requiredDone  = allRequiredDone_locked();
                         enrollName    = m_enrollName;
                         enrollRole    = m_enrollRole;
-                        finalizeNow   = m_enrollFinalizeRequested
-                                     || (samplesCount >= samplesTarget);
+                        binsCopy      = m_enrollBins;
                     }
 
-                    QVariantMap status;
-                    status[QStringLiteral("in_roi")]         = true;
-                    status[QStringLiteral("phase")]          = QStringLiteral("enrolling");
-                    status[QStringLiteral("current_pose")]   = QStringLiteral("center");
-                    status[QStringLiteral("samples")]        = samplesCount;
-                    status[QStringLiteral("samples_target")] = samplesTarget;
-                    emit enrollProgress(status);
+                    emit enrollProgress(statusMap);
 
                     if (finalizeNow) {
-                        QVector<float> meanEmb;
-                        {
-                            QMutexLocker l(&m_mutex);
-                            meanEmb = meanEmbedding(m_enrollSamples);
-                        }
-                        if (meanEmb.isEmpty()) {
-                            emit enrollFinished(false, QStringLiteral("Pas d'embedding"));
-                        } else {
-                            FaceEntry entry;
-                            entry.embedding = meanEmb;
-                            entry.role      = enrollRole;
-                            entry.active    = true;
-                            entry.createdAt = QDateTime::currentDateTime()
-                                                .toString(Qt::ISODate);
+                        if (!requiredDone) {
+                            // refuse — poses obligatoires manquantes
+                            QStringList missing;
+                            for (const QString &p : REQUIRED_POSES) {
+                                if (binsCopy.value(p).size() < m_enrollSamplesTarget)
+                                    missing.append(poseLabel(p));
+                            }
                             {
                                 QMutexLocker l(&m_mutex);
-                                m_db.insert(enrollName, entry);
-                                m_db.save(m_dbPath);
-                                m_enrollSamples.clear();
+                                m_enrollBins.clear();
                                 m_enrollFinalizeRequested = false;
                                 m_mode = Detecting;
                             }
-                            emit enrollFinished(true,
-                                QStringLiteral("%1 enrôlé(e)").arg(enrollName));
-                            qDebug() << "[FaceWorker] enrôlé :" << enrollName;
+                            emit enrollFinished(false,
+                                QStringLiteral("Poses manquantes : %1").arg(missing.join(", ")));
+                            qDebug() << "[FaceWorker] enrôlement refusé — manque :" << missing;
+                        } else {
+                            // moyenne globale (toutes poses confondues)
+                            QVector<QVector<float>> all;
+                            for (const QString &p : ACTIVE_POSES)
+                                for (const auto &s : binsCopy.value(p)) all.append(s);
+
+                            QVector<float> meanEmb = meanEmbedding(all);
+                            if (meanEmb.isEmpty()) {
+                                emit enrollFinished(false, QStringLiteral("Pas d'embedding"));
+                            } else {
+                                FaceEntry entry;
+                                entry.embedding = meanEmb;
+                                entry.role      = enrollRole;
+                                entry.active    = true;
+                                entry.createdAt = QDateTime::currentDateTime()
+                                                    .toString(Qt::ISODate);
+                                {
+                                    QMutexLocker l(&m_mutex);
+                                    m_db.insert(enrollName, entry);
+                                    m_db.save(m_dbPath);
+                                    m_enrollBins.clear();
+                                    m_enrollFinalizeRequested = false;
+                                    m_mode = Detecting;
+                                }
+                                emit enrollFinished(true,
+                                    QStringLiteral("%1 enrôlé(e) (%2 échantillons)")
+                                        .arg(enrollName).arg(all.size()));
+                                qDebug() << "[FaceWorker] enrôlé :" << enrollName
+                                         << "—" << all.size() << "samples";
+                            }
                         }
                     }
                 } else {

@@ -18,6 +18,7 @@ Rectangle {
     // Saisie
     property string userName: ""
     property string userRole: "user"
+    property int    samplesPerPose: 10
 
     // Statut backend (rempli par poll)
     property var status: ({})
@@ -33,6 +34,7 @@ Rectangle {
         errorMsg = ""
         userName = ""
         userRole = "user"
+        samplesPerPose = 10
         status = {}
         if (typeof nameInput !== "undefined") nameInput.text = ""
     }
@@ -177,9 +179,42 @@ Rectangle {
 
                 Item { width: 1; height: 8 }
 
+                Text { text: "Échantillons par pose"; color: "#cbd5e1"; font.pixelSize: 12 }
+                Row {
+                    spacing: 8
+                    Rectangle {
+                        width: 36; height: 36; radius: 8
+                        color: "#1e293b"; border.color: "#334155"
+                        Text { anchors.centerIn: parent; text: "−"; color: "#cbd5e1"; font.pixelSize: 18; font.weight: Font.Bold }
+                        MouseArea {
+                            anchors.fill: parent
+                            onPressed: root.samplesPerPose = Math.max(3, root.samplesPerPose - 1)
+                        }
+                    }
+                    Rectangle {
+                        width: 70; height: 36; radius: 8
+                        color: "#0f172a"; border.color: "#334155"
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.samplesPerPose
+                            color: "white"; font.pixelSize: 14; font.weight: Font.Bold
+                        }
+                    }
+                    Rectangle {
+                        width: 36; height: 36; radius: 8
+                        color: "#1e293b"; border.color: "#334155"
+                        Text { anchors.centerIn: parent; text: "+"; color: "#cbd5e1"; font.pixelSize: 18; font.weight: Font.Bold }
+                        MouseArea {
+                            anchors.fill: parent
+                            onPressed: root.samplesPerPose = Math.min(30, root.samplesPerPose + 1)
+                        }
+                    }
+                }
+
                 Text {
                     width: parent.width
-                    text: "L'enrôlement capture 5 poses (centre / gauche / droite / haut / bas), 5 échantillons par pose."
+                    text: "5 poses : centre / gauche / droite (obligatoires) + haut / bas (bonus). Total : "
+                          + (root.samplesPerPose * 5) + " échantillons (3 obligatoires × " + root.samplesPerPose + ")."
                     color: "#64748b"; font.pixelSize: 11; wrapMode: Text.WordWrap
                 }
             }
@@ -201,7 +236,7 @@ Rectangle {
                     onPressed: {
                         root.errorMsg = ""
                         if (root.keyboard) root.keyboard.close()
-                        root.controller.startEnroll(root.userName, root.userRole, 5)
+                        root.controller.startEnroll(root.userName, root.userRole, root.samplesPerPose)
                     }
                 }
             }
@@ -224,10 +259,19 @@ Rectangle {
                 color: "#000"; radius: 12
                 clip: true
 
-                MjpegItem {
+                Image {
+                    id: enrollCam
                     anchors.fill: parent
-                    source: root.controller ? root.controller.mjpegUrl : ""
-                    active: root.visible && root.state === "live"
+                    source: "image://camera/frame"
+                    cache: false
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: false
+                }
+                Timer {
+                    interval: 33
+                    running: root.visible && root.state === "live"
+                    repeat: true
+                    onTriggered: enrollCam.source = "image://camera/frame?" + Date.now()
                 }
 
                 // Ellipse guide positionnement visage
@@ -302,49 +346,35 @@ Rectangle {
                         border.width: 1.5
                         border.color: modelData.done ? "#22c55e" : (isCurrent ? "#22d3ee" : "#334155")
 
-                        // Thumbnail (si des échantillons existent)
-                        Image {
-                            id: thumb
-                            anchors { top: parent.top; left: parent.left; right: parent.right }
-                            height: 72
-                            source: modelData.count > 0
-                                    ? (root._baseUrl + "/pose_thumb/" + modelData.id + ".jpg?c=" + modelData.count)
-                                    : ""
-                            fillMode: Image.PreserveAspectCrop
-                            visible: modelData.count > 0 && status === Image.Ready
-                            asynchronous: true
-                        }
-
-                        // Placeholder quand pas encore de sample
+                        // Icône centrale (varie selon état : current / done / idle)
                         Text {
-                            anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 18 }
-                            visible: modelData.count === 0
-                            text:    isCurrent ? "◎" : "◉"
-                            color:   isCurrent ? "#22d3ee" : "#475569"
-                            font.pixelSize: 22
+                            anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 16 }
+                            text:  modelData.done ? "✓" : (isCurrent ? "◎" : "◉")
+                            color: modelData.done ? "#22c55e" : (isCurrent ? "#22d3ee" : "#475569")
+                            font.pixelSize: modelData.done ? 28 : 24
+                            font.weight: Font.Bold
                         }
 
-                        // Badge compteur (si en cours)
+                        // Compteur central
+                        Text {
+                            anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 50 }
+                            visible: !modelData.done
+                            text: modelData.count + "/" + modelData.target
+                            color: isCurrent ? "#22d3ee" : "#64748b"
+                            font.pixelSize: 11; font.weight: Font.DemiBold
+                        }
+
+                        // Badge "REQ" pour les poses obligatoires
                         Rectangle {
                             anchors { top: parent.top; right: parent.right; margins: 3 }
-                            visible: modelData.count > 0 && !modelData.done
-                            width:  cntLbl.implicitWidth + 6; height: 14; radius: 4
-                            color:  "#cc0f172a"
+                            visible: modelData.required && !modelData.done
+                            width: 26; height: 12; radius: 3
+                            color: "#7f1d1d33"; border.color: "#7f1d1d"; border.width: 1
                             Text {
-                                id: cntLbl
                                 anchors.centerIn: parent
-                                text:  modelData.count + "/" + modelData.target
-                                color: "#94a3b8"; font.pixelSize: 8
+                                text: "REQ"; color: "#fca5a5"
+                                font.pixelSize: 7; font.weight: Font.Bold
                             }
-                        }
-
-                        // Coche verte (done)
-                        Rectangle {
-                            anchors { top: parent.top; right: parent.right; margins: 3 }
-                            visible: modelData.done
-                            width: 16; height: 16; radius: 8
-                            color: "#22c55e"
-                            Text { anchors.centerIn: parent; text: "✓"; color: "white"; font.pixelSize: 9; font.weight: Font.Bold }
                         }
 
                         // Label pose

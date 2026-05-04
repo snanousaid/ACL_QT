@@ -4,17 +4,15 @@
 #include <QAtomicInt>
 #include <QVariantMap>
 #include <QVariantList>
+#include <QMap>
+#include <QStringList>
 #include "facedb.h"
 
 class FrameQueue;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FaceWorker — Étape 2 : détection (YuNet) + reconnaissance (SFace) sur les
-// frames livrées par CameraWorker via une FrameQueue.
-//
-// Mode Detecting  : pipeline normal (ROI → embedding → match DB → events)
-// Mode Paused     : aucune détection (pause admin)
-// Mode Enrolling  : collecte d'échantillons jusqu'à samplesTarget puis finalize
+// FaceWorker — Détection (YuNet) + reconnaissance (SFace) + enrôlement
+// multi-poses (iPhone-like : 3 obligatoires + 2 optionnelles).
 // ─────────────────────────────────────────────────────────────────────────────
 class FaceWorker : public QThread
 {
@@ -54,9 +52,8 @@ protected:
     void run() override;
 
 private:
-    // ── Constantes pipeline (alignées sur Python) ───────────────────────────
+    // ── Constantes pipeline ─────────────────────────────────────────────────
     static const int   COOLDOWN_MS    = 5000;
-    static const int   ENROLL_SAMPLES = 10;
     static constexpr float SCORE_THRESH    = 0.70f;
     static constexpr float NMS_THRESH      = 0.30f;
     static constexpr float MATCH_THRESH    = 0.70f;
@@ -71,6 +68,11 @@ private:
     static constexpr int   ENROLL_MIN_WIDTH   = 80;
     static constexpr int   ENROLL_INTERVAL_MS = 150;
 
+    // ── Helpers enrôlement (appelés depuis run() avec mutex tenu) ───────────
+    QString nextPoseToFill_locked() const;
+    bool    allRequiredDone_locked() const;
+    QVariantMap buildEnrollStatus_locked(bool inRoi) const;
+
     // ── État partagé ────────────────────────────────────────────────────────
     FrameQueue    *m_queue;
     const QString  m_dbPath;
@@ -82,10 +84,12 @@ private:
     FaceDb         m_db;
 
     // Enrollment state
-    QString                  m_enrollName;
-    QString                  m_enrollRole;
-    int                      m_enrollSamplesTarget = ENROLL_SAMPLES;
-    QVector<QVector<float>>  m_enrollSamples;
-    bool                     m_enrollFinalizeRequested = false;
-    qint64                   m_enrollLastSampleMs      = 0;
+    QString                                   m_enrollName;
+    QString                                   m_enrollRole;
+    int                                       m_enrollSamplesTarget = 10;
+    QMap<QString, QVector<QVector<float>>>    m_enrollBins;
+    QString                                   m_enrollCurrentPose;
+    QString                                   m_enrollLastMsg;
+    bool                                      m_enrollFinalizeRequested = false;
+    qint64                                    m_enrollLastSampleMs      = 0;
 };
