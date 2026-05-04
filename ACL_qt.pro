@@ -35,7 +35,9 @@ SOURCES += \
     appcontroller.cpp \
     opencvtest.cpp \
     facedb.cpp \
+    framequeue.cpp \
     cameraworker.cpp \
+    faceworker.cpp \
     cameraimgprovider.cpp
 
 HEADERS += \
@@ -44,7 +46,9 @@ HEADERS += \
     appcontroller.h \
     opencvtest.h \
     facedb.h \
+    framequeue.h \
     cameraworker.h \
+    faceworker.h \
     cameraimgprovider.h
 
 RESOURCES += qml.qrc

@@ -1,4 +1,5 @@
 #include "appcontroller.h"
+#include "framequeue.h"
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QJsonDocument>
@@ -27,21 +28,33 @@ AppController::AppController(QObject *parent)
     connect(m_badgeSocket, &SocketIoClient::eventReceived,
             this, &AppController::onBadgeEvent);
 
-    // ── CameraWorker ──────────────────────────────────────────────────────────
-    m_camera = new CameraWorker(this);
+    // ── Pipeline caméra : Camera (capture) → FrameQueue → Face (detect+recog) ─
+#ifdef ACL_OPENCV_ENABLED
+    m_frameQueue = new FrameQueue();
+#else
+    m_frameQueue = nullptr;
+#endif
+
+    m_camera = new CameraWorker(m_frameQueue, this);
     connect(m_camera, &CameraWorker::frameReady,
             this,     &AppController::frameReady);
-    connect(m_camera, &CameraWorker::faceStatusChanged,
-            this,     &AppController::onCamFaceStatus);
-    connect(m_camera, &CameraWorker::accessGranted,
-            this,     &AppController::onCamAccessGranted);
-    connect(m_camera, &CameraWorker::accessDenied,
-            this,     &AppController::onCamAccessDenied);
-    connect(m_camera, &CameraWorker::enrollProgress,
-            this,     &AppController::onCamEnrollProgress);
-    connect(m_camera, &CameraWorker::enrollFinished,
-            this,     &AppController::onCamEnrollFinished);
     m_camera->start();
+
+    m_face = new FaceWorker(m_frameQueue,
+                            QStringLiteral("/opt/ACL_qt/embeddings/known_faces.json"),
+                            QStringLiteral("/opt/ACL_qt/models"),
+                            this);
+    connect(m_face, &FaceWorker::faceStatusChanged,
+            this,   &AppController::onCamFaceStatus);
+    connect(m_face, &FaceWorker::accessGranted,
+            this,   &AppController::onCamAccessGranted);
+    connect(m_face, &FaceWorker::accessDenied,
+            this,   &AppController::onCamAccessDenied);
+    connect(m_face, &FaceWorker::enrollProgress,
+            this,   &AppController::onCamEnrollProgress);
+    connect(m_face, &FaceWorker::enrollFinished,
+            this,   &AppController::onCamEnrollFinished);
+    m_face->start();
 
     // ── Timer reset faceAccess (3 s après granted/denied) ────────────────────
     m_accessResetTimer = new QTimer(this);
@@ -191,30 +204,30 @@ void AppController::resetFaceAccess()
 
 void AppController::pauseRecognition()
 {
-    m_camera->pause();
+    m_face->pause();
 }
 
 void AppController::resumeRecognition()
 {
-    m_camera->resume();
+    m_face->resume();
 }
 
-// ── Face users (CameraWorker/FaceDb) ─────────────────────────────────────────
+// ── Face users (FaceWorker/FaceDb) ───────────────────────────────────────────
 
 void AppController::listFaceUsers()
 {
-    emit faceUsersLoaded(m_camera->listUsers());
+    emit faceUsersLoaded(m_face->listUsers());
 }
 
 void AppController::toggleFaceUser(const QString &name)
 {
-    m_camera->toggleUser(name);
+    m_face->toggleUser(name);
     emit faceUserMutated(QStringLiteral("toggle"), name);
 }
 
 void AppController::deleteFaceUser(const QString &name)
 {
-    m_camera->deleteUser(name);
+    m_face->deleteUser(name);
     emit faceUserMutated(QStringLiteral("delete"), name);
 }
 
@@ -222,18 +235,18 @@ void AppController::deleteFaceUser(const QString &name)
 
 void AppController::startEnroll(const QString &name, const QString &role, int samplesPerPose)
 {
-    m_camera->startEnroll(name, role, samplesPerPose);
+    m_face->startEnroll(name, role, samplesPerPose);
     emit enrollResult(QStringLiteral("start"), true, QStringLiteral("Enrôlement démarré"));
 }
 
 void AppController::finalizeEnroll()
 {
-    m_camera->finalizeEnroll();
+    m_face->finalizeEnroll();
 }
 
 void AppController::cancelEnroll()
 {
-    m_camera->cancelEnroll();
+    m_face->cancelEnroll();
     emit enrollResult(QStringLiteral("cancel"), true, QStringLiteral("annulé"));
 }
 

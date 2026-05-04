@@ -5,6 +5,9 @@
 #include <QNetworkAccessManager>
 #include "socketioclient.h"
 #include "cameraworker.h"
+#include "faceworker.h"
+
+class FrameQueue;
 
 class AppController : public QObject
 {
@@ -102,7 +105,9 @@ private:
 
     SocketIoClient        *m_badgeSocket;
     QNetworkAccessManager *m_nam;
+    FrameQueue            *m_frameQueue;   // partagé Camera ↔ Face
     CameraWorker          *m_camera;
+    FaceWorker            *m_face;
     QTimer                *m_accessResetTimer;
 
     // Dernier statut enrollment pour pollEnrollStatus()
