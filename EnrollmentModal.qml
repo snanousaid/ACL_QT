@@ -181,32 +181,48 @@ Rectangle {
 
                 Text { text: "Échantillons par pose"; color: "#cbd5e1"; font.pixelSize: 12 }
                 Row {
-                    spacing: 8
+                    id: samplesRow
+                    spacing: 10
+
                     Rectangle {
-                        width: 36; height: 36; radius: 8
-                        color: "#1e293b"; border.color: "#334155"
-                        Text { anchors.centerIn: parent; text: "−"; color: "#cbd5e1"; font.pixelSize: 18; font.weight: Font.Bold }
+                        id: minusBtn
+                        width: 44; height: 44; radius: 10
+                        color: minusMA.pressed ? "#0f172a" : "#1e293b"
+                        border.color: "#475569"; border.width: 1
+                        Text { anchors.centerIn: parent; text: "−"; color: "#cbd5e1"; font.pixelSize: 22; font.weight: Font.Bold }
                         MouseArea {
+                            id: minusMA
                             anchors.fill: parent
-                            onPressed: root.samplesPerPose = Math.max(3, root.samplesPerPose - 1)
+                            onClicked: {
+                                if (root.keyboard) root.keyboard.close()
+                                Qt.inputMethod.hide()
+                                root.samplesPerPose = Math.max(3, root.samplesPerPose - 1)
+                            }
                         }
                     }
                     Rectangle {
-                        width: 70; height: 36; radius: 8
-                        color: "#0f172a"; border.color: "#334155"
+                        width: 80; height: 44; radius: 10
+                        color: "#0f172a"; border.color: "#3b82f6"; border.width: 1
                         Text {
                             anchors.centerIn: parent
                             text: root.samplesPerPose
-                            color: "white"; font.pixelSize: 14; font.weight: Font.Bold
+                            color: "white"; font.pixelSize: 16; font.weight: Font.Bold
                         }
                     }
                     Rectangle {
-                        width: 36; height: 36; radius: 8
-                        color: "#1e293b"; border.color: "#334155"
-                        Text { anchors.centerIn: parent; text: "+"; color: "#cbd5e1"; font.pixelSize: 18; font.weight: Font.Bold }
+                        id: plusBtn
+                        width: 44; height: 44; radius: 10
+                        color: plusMA.pressed ? "#0f172a" : "#1e293b"
+                        border.color: "#475569"; border.width: 1
+                        Text { anchors.centerIn: parent; text: "+"; color: "#cbd5e1"; font.pixelSize: 22; font.weight: Font.Bold }
                         MouseArea {
+                            id: plusMA
                             anchors.fill: parent
-                            onPressed: root.samplesPerPose = Math.min(30, root.samplesPerPose + 1)
+                            onClicked: {
+                                if (root.keyboard) root.keyboard.close()
+                                Qt.inputMethod.hide()
+                                root.samplesPerPose = Math.min(30, root.samplesPerPose + 1)
+                            }
                         }
                     }
                 }

@@ -172,25 +172,79 @@ Window {
             onTriggered: settingsBtn.visible = false
         }
 
-        Rectangle {
+        // ── Bouton Settings flottant (apparaît temporairement après tap-tap) ──
+        Item {
             id: settingsBtn
             visible: false
             z: 30
-            width: 44; height: 44; radius: 22
-            color: "#cc1e293b"
-            border.color: "#4d64748b"
-            anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 16 }
+            width: 56; height: 56
+            anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 18 }
 
-            Text {
+            // Halo pulsant
+            Rectangle {
                 anchors.centerIn: parent
-                text: "⚙"
-                color: "#94a3b8"
-                font.pixelSize: 22
+                width:  72; height: 72; radius: 36
+                color:  "#3b82f622"
+                border.color: "#3b82f6"; border.width: 1
+                opacity: 0.6
+                SequentialAnimation on opacity {
+                    loops: Animation.Infinite; running: settingsBtn.visible
+                    NumberAnimation { from: 0.6; to: 0.15; duration: 1000; easing.type: Easing.InOutSine }
+                    NumberAnimation { from: 0.15; to: 0.6; duration: 1000; easing.type: Easing.InOutSine }
+                }
+            }
+
+            // Bouton principal
+            Rectangle {
+                id: settingsCircle
+                anchors.fill: parent
+                radius: 28
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: settingsMA.pressed ? "#1d4ed8" : "#2563eb" }
+                    GradientStop { position: 1.0; color: settingsMA.pressed ? "#0f172a" : "#1e293b" }
+                }
+                border.color: "#3b82f6"; border.width: 1.5
+
+                // Engrenage en Canvas (plus net que l'emoji)
+                Canvas {
+                    anchors.centerIn: parent
+                    width: 26; height: 26
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        ctx.strokeStyle = "white"
+                        ctx.fillStyle   = "white"
+                        ctx.lineWidth   = 1.5
+                        ctx.lineJoin    = "round"
+                        var cx = 13, cy = 13, r = 9, rIn = 4.5, n = 8
+                        ctx.beginPath()
+                        for (var i = 0; i < n * 2; i++) {
+                            var a   = (Math.PI * 2 * i) / (n * 2) - Math.PI / 2
+                            var rad = (i % 2 === 0) ? r : r - 2
+                            var x   = cx + rad * Math.cos(a)
+                            var y   = cy + rad * Math.sin(a)
+                            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+                        }
+                        ctx.closePath()
+                        ctx.stroke()
+                        ctx.beginPath(); ctx.arc(cx, cy, rIn, 0, Math.PI * 2); ctx.stroke()
+                        ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill()
+                    }
+                }
+            }
+
+            // Petit indicateur "admin"
+            Rectangle {
+                anchors { right: parent.right; bottom: parent.bottom; rightMargin: -2; bottomMargin: -2 }
+                width: 18; height: 18; radius: 9
+                color: "#0f172a"; border.color: "#3b82f6"; border.width: 1
+                Text { anchors.centerIn: parent; text: "🔒"; font.pixelSize: 9 }
             }
 
             MouseArea {
+                id: settingsMA
                 anchors.fill: parent
-                onPressed: {
+                onClicked: {
                     settingsBtn.visible = false
                     passwordModal.visible = true
                     root.adminVisible = true
@@ -237,12 +291,37 @@ Window {
 
                     Item { width: 1; height: 20 }
 
-                    KbInput {
-                        id: pwInput
+                    Item {
                         width: parent.width
-                        keyboard:   keyboard
-                        isPassword: true
-                        placeholder: "••••••••••"
+                        height: pwInput.height
+
+                        KbInput {
+                            id: pwInput
+                            anchors { left: parent.left; right: eyeBtn.left; verticalCenter: parent.verticalCenter; rightMargin: 8 }
+                            keyboard:    keyboard
+                            isPassword:  true
+                            showPassword: eyeBtn.shown
+                            placeholder: "••••••••••"
+                        }
+
+                        Rectangle {
+                            id: eyeBtn
+                            anchors { right: parent.right; verticalCenter: pwInput.verticalCenter }
+                            width: 38; height: 38; radius: 8
+                            color:  eyeMA.pressed ? "#0f172a" : "#1e293b"
+                            border.color: shown ? "#3b82f6" : "#475569"
+                            property bool shown: false
+                            Text {
+                                anchors.centerIn: parent
+                                text: eyeBtn.shown ? "🙈" : "👁"
+                                font.pixelSize: 18
+                            }
+                            MouseArea {
+                                id: eyeMA
+                                anchors.fill: parent
+                                onClicked: eyeBtn.shown = !eyeBtn.shown
+                            }
+                        }
                     }
 
                     Item { width: 1; height: 8 }

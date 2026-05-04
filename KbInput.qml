@@ -9,7 +9,9 @@ Item {
     width: 200
 
     property alias text:        inputField.text
+    property alias inputItem:   inputField
     property bool   isPassword:  false
+    property bool   showPassword: false   // toggle externe pour afficher en clair
     property string placeholder: ""
     property string label:       ""
     property var    keyboard:    null   // ignoré — Qt VKB gère le focus automatiquement
@@ -41,7 +43,7 @@ Item {
                 color:       "white"
                 font.pixelSize: 14
                 font.family: "monospace"
-                echoMode:    root.isPassword ? TextInput.Password : TextInput.Normal
+                echoMode:    (root.isPassword && !root.showPassword) ? TextInput.Password : TextInput.Normal
                 activeFocusOnPress: true
                 inputMethodHints:   root.isPassword
                                     ? Qt.ImhHiddenText | Qt.ImhNoPredictiveText
