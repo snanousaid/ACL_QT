@@ -174,10 +174,7 @@ Rectangle {
                             MouseArea {
                                 id: roleMA
                                 anchors.fill: parent
-                                onPressed: {
-                                    mouse.accepted = true
-                                    root.userRole = modelData
-                                }
+                                onClicked: root.userRole = modelData
                             }
                         }
                     }
@@ -199,10 +196,7 @@ Rectangle {
                         MouseArea {
                             id: minusMA
                             anchors.fill: parent
-                            onPressed: {
-                                mouse.accepted = true
-                                root.samplesPerPose = Math.max(3, root.samplesPerPose - 1)
-                            }
+                            onClicked: root.samplesPerPose = Math.max(3, root.samplesPerPose - 1)
                         }
                     }
 
@@ -240,10 +234,7 @@ Rectangle {
                         MouseArea {
                             id: plusMA
                             anchors.fill: parent
-                            onPressed: {
-                                mouse.accepted = true
-                                root.samplesPerPose = Math.min(30, root.samplesPerPose + 1)
-                            }
+                            onClicked: root.samplesPerPose = Math.min(30, root.samplesPerPose + 1)
                         }
                     }
                 }

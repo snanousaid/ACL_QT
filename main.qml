@@ -331,11 +331,7 @@ Window {
                             MouseArea {
                                 id: eyeMA
                                 anchors.fill: parent
-                                preventStealing: true
-                                onPressed: {
-                                    mouse.accepted = true
-                                    eyeBtn.revealed = !eyeBtn.revealed
-                                }
+                                onClicked: eyeBtn.revealed = !eyeBtn.revealed
                             }
                         }
                     }
@@ -467,11 +463,22 @@ Window {
 
             function close() { Qt.inputMethod.hide() }
 
-            // Clavier à taille native (compatible écran 7")
+            // Clavier à taille native (compatible écran 7"), avec zoom 1.3×
+            // uniquement quand le champ focus a Qt.ImhDigitsOnly (champs nombres).
             InputPanel {
                 id: inputPanel
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                 visible: Qt.inputMethod.visible
+
+                // Détection du mode numérique depuis le hint du champ focus
+                property bool numericMode: {
+                    var item = Qt.inputMethod.inputItem
+                    if (!item) return false
+                    return (item.inputMethodHints & Qt.ImhDigitsOnly) !== 0
+                }
+
+                scale: numericMode ? 1.3 : 1.0
+                transformOrigin: Item.Bottom
             }
         }
     }
