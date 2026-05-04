@@ -126,12 +126,9 @@ Rectangle {
                     Text { text: "Infos et configuration"; color: "#64748b"; font.pixelSize: 10 }
                 }
             }
-            Rectangle {
+            CloseIcon {
                 anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                width: 34; height: 34; radius: 17
-                color: "#1e293b"
-                Text { anchors.centerIn: parent; text: "✕"; color: "#cbd5e1"; font.pixelSize: 14 }
-                MouseArea { anchors.fill: parent; onPressed: root.close() }
+                onClicked: root.close()
             }
             Rectangle { anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
                         height: 1; color: "#1e293b" }

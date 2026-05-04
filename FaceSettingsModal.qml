@@ -83,12 +83,9 @@ Rectangle {
                 }
             }
 
-            Rectangle {
+            CloseIcon {
                 anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                width: 36; height: 36; radius: 18
-                color: "#1e293b"
-                Text { anchors.centerIn: parent; text: "✕"; color: "#cbd5e1"; font.pixelSize: 14 }
-                MouseArea { anchors.fill: parent; onPressed: root.close() }
+                onClicked: root.close()
             }
 
             Rectangle {

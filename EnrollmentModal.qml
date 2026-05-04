@@ -108,12 +108,9 @@ Rectangle {
                     : "Terminé"
                 color: "white"; font.pixelSize: 16; font.weight: Font.Bold
             }
-            Rectangle {
+            CloseIcon {
                 anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                width: 36; height: 36; radius: 18
-                color: "#1e293b"
-                Text { anchors.centerIn: parent; text: "✕"; color: "#cbd5e1"; font.pixelSize: 14 }
-                MouseArea { anchors.fill: parent; onPressed: root.close() }
+                onClicked: root.close()
             }
             Rectangle {
                 anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
@@ -164,15 +161,24 @@ Rectangle {
                     Repeater {
                         model: ["user", "admin"]
                         Rectangle {
+                            id: roleBtn
+                            property bool selected: root.userRole === modelData
                             width: 100; height: 36; radius: 8
-                            color: root.userRole === modelData ? "#2563eb" : "#1e293b"
-                            border.color: root.userRole === modelData ? "#3b82f6" : "#334155"
+                            color: selected ? "#2563eb" : (roleMA.pressed ? "#0f172a" : "#1e293b")
+                            border.color: selected ? "#3b82f6" : "#334155"
                             Text {
                                 anchors.centerIn: parent; text: modelData
-                                color: root.userRole === modelData ? "white" : "#94a3b8"
+                                color: roleBtn.selected ? "white" : "#94a3b8"
                                 font.pixelSize: 12; font.weight: Font.DemiBold
                             }
-                            MouseArea { anchors.fill: parent; onPressed: root.userRole = modelData }
+                            MouseArea {
+                                id: roleMA
+                                anchors.fill: parent
+                                onPressed: {
+                                    mouse.accepted = true
+                                    root.userRole = modelData
+                                }
+                            }
                         }
                     }
                 }
@@ -194,13 +200,13 @@ Rectangle {
                             id: minusMA
                             anchors.fill: parent
                             onPressed: {
+                                mouse.accepted = true
                                 root.samplesPerPose = Math.max(3, root.samplesPerPose - 1)
-                                samplesField.text = root.samplesPerPose
                             }
                         }
                     }
 
-                    // Champ éditable : permet de taper directement la valeur
+                    // Champ éditable : permet de taper directement la valeur (clavier Qt VKB en mode numérique)
                     Rectangle {
                         width: 90; height: 48; radius: 10
                         color: "#0f172a"; border.color: samplesField.activeFocus ? "#3b82f6" : "#475569"; border.width: 1
@@ -210,21 +216,17 @@ Rectangle {
                             horizontalAlignment: TextInput.AlignHCenter
                             verticalAlignment:   TextInput.AlignVCenter
                             color: "white"; font.pixelSize: 18; font.weight: Font.Bold
-                            text: root.samplesPerPose
+                            // Binding unidirectionnel : root.samplesPerPose → text (pas de surcharge manuelle)
+                            text: String(root.samplesPerPose)
                             inputMethodHints: Qt.ImhDigitsOnly
                             validator: IntValidator { bottom: 3; top: 30 }
-                            onTextChanged: {
-                                var v = parseInt(text)
-                                if (!isNaN(v) && v >= 3 && v <= 30)
-                                    root.samplesPerPose = v
-                            }
+                            // Mise à jour de root.samplesPerPose UNIQUEMENT à la fin de l'édition
+                            // (évite le binding loop avec le setter)
                             onEditingFinished: {
-                                // Re-clamp si l'utilisateur a saisi hors plage
                                 var v = parseInt(text)
                                 if (isNaN(v) || v < 3) v = 3
                                 if (v > 30) v = 30
-                                root.samplesPerPose = v
-                                if (text !== String(v)) text = v
+                                if (root.samplesPerPose !== v) root.samplesPerPose = v
                             }
                         }
                     }
@@ -239,8 +241,8 @@ Rectangle {
                             id: plusMA
                             anchors.fill: parent
                             onPressed: {
+                                mouse.accepted = true
                                 root.samplesPerPose = Math.min(30, root.samplesPerPose + 1)
-                                samplesField.text = root.samplesPerPose
                             }
                         }
                     }

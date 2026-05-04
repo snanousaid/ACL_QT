@@ -246,12 +246,18 @@ Window {
             color: "#b3000000"
             z: 40
 
+            // Backdrop : absorbe les clics → ne ferme pas le modal sur tap arrière-plan
+            MouseArea { anchors.fill: parent; onPressed: mouse.accepted = true }
+
             Rectangle {
                 anchors.centerIn: parent
                 width: 320; height: pwCol.implicitHeight + 48
                 radius: 20
                 color: "#0f172a"
                 border.color: "#334155"
+
+                // Carte : absorbe explicitement les clics non gérés
+                MouseArea { anchors.fill: parent; onPressed: mouse.accepted = true; z: -1 }
 
                 Column {
                     id: pwCol
@@ -342,7 +348,11 @@ Window {
                             MouseArea {
                                 id: eyeMA
                                 anchors.fill: parent
-                                onPressed: eyeBtn.shown = !eyeBtn.shown
+                                preventStealing: true
+                                onPressed: {
+                                    mouse.accepted = true
+                                    eyeBtn.shown = !eyeBtn.shown
+                                }
                             }
                         }
                     }
@@ -461,6 +471,11 @@ Window {
 
         // ── Qt Virtual Keyboard ───────────────────────────────────────────────
         // Wrapper Item pour maintenir l'API keyboard.close() utilisée partout.
+        // Le clavier auto-sélectionne sa disposition (Symbols/Numbers/QWERTY)
+        // en fonction de inputMethodHints du champ qui a le focus :
+        //   • Qt.ImhDigitsOnly       → pavé numérique 0-9
+        //   • Qt.ImhFormattedNumbers → numérique avec séparateurs
+        //   • aucun hint             → QWERTY normal
         Item {
             id: keyboard
             anchors.fill: parent
@@ -469,9 +484,14 @@ Window {
 
             function close() { Qt.inputMethod.hide() }
 
+            // Zoom : passer de la hauteur native (~140 px) à ~210 px (×1.5)
+            // pour la lisibilité sur l'écran 7 pouces du terminal.
             InputPanel {
+                id: inputPanel
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                 visible: Qt.inputMethod.visible
+                scale: 1.4
+                transformOrigin: Item.Bottom
             }
         }
     }
