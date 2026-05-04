@@ -40,6 +40,13 @@ Window {
     property real _lastTapMs: 0   // déduplication touch natif + synthèse mouse
 
     function _handleTap() {
+        // Ignorer les taps quand un modal admin est ouvert (sinon le double-tap
+        // detector continue de compter sur des taps qui sont en réalité des
+        // interactions modal → bouton settings réapparaît / autre comportement
+        // imprévu).
+        if (root.adminVisible) return
+        if (passwordModal.visible) return
+
         var now = Date.now()
         if (now - root._lastTapMs < 150) return   // même tap reçu deux fois (MPTA + synthèse)
         root._lastTapMs = now
@@ -246,8 +253,18 @@ Window {
             color: "#b3000000"
             z: 40
 
-            // Backdrop : absorbe les clics → ne ferme pas le modal sur tap arrière-plan
-            MouseArea { anchors.fill: parent; onPressed: mouse.accepted = true }
+            // Backdrop : absorbe TOUS les events (mouse + touch natif) pour
+            // empêcher le double-tap detector de l'arrière-plan de continuer
+            // à compter quand le modal est ouvert.
+            MouseArea {
+                anchors.fill: parent
+                onPressed: mouse.accepted = true
+            }
+            MultiPointTouchArea {
+                anchors.fill: parent
+                touchPoints: [ TouchPoint { id: pwModalTouch } ]
+                onPressed: {}   // absorbe le touch natif
+            }
 
             Rectangle {
                 anchors.centerIn: parent
@@ -282,67 +299,33 @@ Window {
 
                     Item { width: 1; height: 20 }
 
-                    Item {
+                    Row {
                         width: parent.width
-                        height: pwInput.height
+                        spacing: 8
 
                         KbInput {
                             id: pwInput
-                            anchors { left: parent.left; right: eyeBtn.left; verticalCenter: parent.verticalCenter; rightMargin: 8 }
+                            width: parent.width - eyeBtn.width - 8
                             keyboard:    keyboard
                             isPassword:  true
-                            showPassword: eyeBtn.shown
+                            showPassword: eyeBtn.revealed
                             placeholder: "••••••••••"
                         }
 
                         Rectangle {
                             id: eyeBtn
-                            anchors { right: parent.right; verticalCenter: pwInput.verticalCenter }
-                            width: 44; height: 44; radius: 10
-                            color:  eyeMA.pressed ? "#1d4ed8" : "#1e293b"
-                            border.color: shown ? "#3b82f6" : "#475569"; border.width: 1.5
-                            property bool shown: false
+                            width: 70; height: 38; radius: 8
+                            color: eyeMA.pressed ? "#1d4ed8" : (revealed ? "#1e3a8a" : "#1e293b")
+                            border.color: revealed ? "#3b82f6" : "#475569"; border.width: 1.5
+                            anchors.verticalCenter: parent.verticalCenter
+                            property bool revealed: false
 
-                            // Icône œil dessinée en Canvas (pas d'emoji = rendu net partout)
-                            Canvas {
-                                id: eyeCanvas
+                            Text {
                                 anchors.centerIn: parent
-                                width: 26; height: 18
-                                property bool shown: eyeBtn.shown
-                                onShownChanged: requestPaint()
-                                onPaint: {
-                                    var ctx = getContext("2d")
-                                    ctx.clearRect(0, 0, width, height)
-                                    ctx.strokeStyle = shown ? "#3b82f6" : "#cbd5e1"
-                                    ctx.fillStyle   = shown ? "#3b82f6" : "#cbd5e1"
-                                    ctx.lineWidth   = 1.8
-                                    ctx.lineJoin    = "round"
-                                    ctx.lineCap     = "round"
-
-                                    // Forme d'œil (deux courbes Bézier formant une amande)
-                                    var cx = 13, cy = 9
-                                    ctx.beginPath()
-                                    ctx.moveTo(2, cy)
-                                    ctx.quadraticCurveTo(cx, -1, 24, cy)
-                                    ctx.quadraticCurveTo(cx, 19, 2, cy)
-                                    ctx.closePath()
-                                    ctx.stroke()
-
-                                    // Pupille
-                                    ctx.beginPath()
-                                    ctx.arc(cx, cy, 3, 0, Math.PI * 2)
-                                    ctx.fill()
-
-                                    // Trait diagonal (mode masqué)
-                                    if (!shown) {
-                                        ctx.strokeStyle = "#cbd5e1"
-                                        ctx.lineWidth   = 2
-                                        ctx.beginPath()
-                                        ctx.moveTo(2, 16)
-                                        ctx.lineTo(24, 2)
-                                        ctx.stroke()
-                                    }
-                                }
+                                text: eyeBtn.revealed ? "Cacher" : "Voir"
+                                color: eyeBtn.revealed ? "#93c5fd" : "#cbd5e1"
+                                font.pixelSize: 12
+                                font.weight:    Font.DemiBold
                             }
 
                             MouseArea {
@@ -351,7 +334,7 @@ Window {
                                 preventStealing: true
                                 onPressed: {
                                     mouse.accepted = true
-                                    eyeBtn.shown = !eyeBtn.shown
+                                    eyeBtn.revealed = !eyeBtn.revealed
                                 }
                             }
                         }
@@ -484,14 +467,11 @@ Window {
 
             function close() { Qt.inputMethod.hide() }
 
-            // Zoom : passer de la hauteur native (~140 px) à ~210 px (×1.5)
-            // pour la lisibilité sur l'écran 7 pouces du terminal.
+            // Clavier à taille native (compatible écran 7")
             InputPanel {
                 id: inputPanel
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                 visible: Qt.inputMethod.visible
-                scale: 1.4
-                transformOrigin: Item.Bottom
             }
         }
     }
