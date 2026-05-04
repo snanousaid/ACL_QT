@@ -292,19 +292,57 @@ Window {
                         Rectangle {
                             id: eyeBtn
                             anchors { right: parent.right; verticalCenter: pwInput.verticalCenter }
-                            width: 38; height: 38; radius: 8
-                            color:  eyeMA.pressed ? "#0f172a" : "#1e293b"
-                            border.color: shown ? "#3b82f6" : "#475569"
+                            width: 44; height: 44; radius: 10
+                            color:  eyeMA.pressed ? "#1d4ed8" : "#1e293b"
+                            border.color: shown ? "#3b82f6" : "#475569"; border.width: 1.5
                             property bool shown: false
-                            Text {
+
+                            // Icône œil dessinée en Canvas (pas d'emoji = rendu net partout)
+                            Canvas {
+                                id: eyeCanvas
                                 anchors.centerIn: parent
-                                text: eyeBtn.shown ? "🙈" : "👁"
-                                font.pixelSize: 18
+                                width: 26; height: 18
+                                property bool shown: eyeBtn.shown
+                                onShownChanged: requestPaint()
+                                onPaint: {
+                                    var ctx = getContext("2d")
+                                    ctx.clearRect(0, 0, width, height)
+                                    ctx.strokeStyle = shown ? "#3b82f6" : "#cbd5e1"
+                                    ctx.fillStyle   = shown ? "#3b82f6" : "#cbd5e1"
+                                    ctx.lineWidth   = 1.8
+                                    ctx.lineJoin    = "round"
+                                    ctx.lineCap     = "round"
+
+                                    // Forme d'œil (deux courbes Bézier formant une amande)
+                                    var cx = 13, cy = 9
+                                    ctx.beginPath()
+                                    ctx.moveTo(2, cy)
+                                    ctx.quadraticCurveTo(cx, -1, 24, cy)
+                                    ctx.quadraticCurveTo(cx, 19, 2, cy)
+                                    ctx.closePath()
+                                    ctx.stroke()
+
+                                    // Pupille
+                                    ctx.beginPath()
+                                    ctx.arc(cx, cy, 3, 0, Math.PI * 2)
+                                    ctx.fill()
+
+                                    // Trait diagonal (mode masqué)
+                                    if (!shown) {
+                                        ctx.strokeStyle = "#cbd5e1"
+                                        ctx.lineWidth   = 2
+                                        ctx.beginPath()
+                                        ctx.moveTo(2, 16)
+                                        ctx.lineTo(24, 2)
+                                        ctx.stroke()
+                                    }
+                                }
                             }
+
                             MouseArea {
                                 id: eyeMA
                                 anchors.fill: parent
-                                onClicked: eyeBtn.shown = !eyeBtn.shown
+                                onPressed: eyeBtn.shown = !eyeBtn.shown
                             }
                         }
                     }

@@ -179,49 +179,68 @@ Rectangle {
 
                 Item { width: 1; height: 8 }
 
-                Text { text: "Échantillons par pose"; color: "#cbd5e1"; font.pixelSize: 12 }
+                Text { text: "Échantillons par pose (3-30)"; color: "#cbd5e1"; font.pixelSize: 12 }
                 Row {
                     id: samplesRow
                     spacing: 10
 
                     Rectangle {
                         id: minusBtn
-                        width: 44; height: 44; radius: 10
-                        color: minusMA.pressed ? "#0f172a" : "#1e293b"
+                        width: 48; height: 48; radius: 10
+                        color: minusMA.pressed ? "#1d4ed8" : "#1e293b"
                         border.color: "#475569"; border.width: 1
-                        Text { anchors.centerIn: parent; text: "−"; color: "#cbd5e1"; font.pixelSize: 22; font.weight: Font.Bold }
+                        Text { anchors.centerIn: parent; text: "−"; color: "white"; font.pixelSize: 24; font.weight: Font.Bold }
                         MouseArea {
                             id: minusMA
                             anchors.fill: parent
-                            onClicked: {
-                                if (root.keyboard) root.keyboard.close()
-                                Qt.inputMethod.hide()
+                            onPressed: {
                                 root.samplesPerPose = Math.max(3, root.samplesPerPose - 1)
+                                samplesField.text = root.samplesPerPose
                             }
                         }
                     }
+
+                    // Champ éditable : permet de taper directement la valeur
                     Rectangle {
-                        width: 80; height: 44; radius: 10
-                        color: "#0f172a"; border.color: "#3b82f6"; border.width: 1
-                        Text {
-                            anchors.centerIn: parent
+                        width: 90; height: 48; radius: 10
+                        color: "#0f172a"; border.color: samplesField.activeFocus ? "#3b82f6" : "#475569"; border.width: 1
+                        TextInput {
+                            id: samplesField
+                            anchors.fill: parent
+                            horizontalAlignment: TextInput.AlignHCenter
+                            verticalAlignment:   TextInput.AlignVCenter
+                            color: "white"; font.pixelSize: 18; font.weight: Font.Bold
                             text: root.samplesPerPose
-                            color: "white"; font.pixelSize: 16; font.weight: Font.Bold
+                            inputMethodHints: Qt.ImhDigitsOnly
+                            validator: IntValidator { bottom: 3; top: 30 }
+                            onTextChanged: {
+                                var v = parseInt(text)
+                                if (!isNaN(v) && v >= 3 && v <= 30)
+                                    root.samplesPerPose = v
+                            }
+                            onEditingFinished: {
+                                // Re-clamp si l'utilisateur a saisi hors plage
+                                var v = parseInt(text)
+                                if (isNaN(v) || v < 3) v = 3
+                                if (v > 30) v = 30
+                                root.samplesPerPose = v
+                                if (text !== String(v)) text = v
+                            }
                         }
                     }
+
                     Rectangle {
                         id: plusBtn
-                        width: 44; height: 44; radius: 10
-                        color: plusMA.pressed ? "#0f172a" : "#1e293b"
+                        width: 48; height: 48; radius: 10
+                        color: plusMA.pressed ? "#1d4ed8" : "#1e293b"
                         border.color: "#475569"; border.width: 1
-                        Text { anchors.centerIn: parent; text: "+"; color: "#cbd5e1"; font.pixelSize: 22; font.weight: Font.Bold }
+                        Text { anchors.centerIn: parent; text: "+"; color: "white"; font.pixelSize: 24; font.weight: Font.Bold }
                         MouseArea {
                             id: plusMA
                             anchors.fill: parent
-                            onClicked: {
-                                if (root.keyboard) root.keyboard.close()
-                                Qt.inputMethod.hide()
+                            onPressed: {
                                 root.samplesPerPose = Math.min(30, root.samplesPerPose + 1)
+                                samplesField.text = root.samplesPerPose
                             }
                         }
                     }
