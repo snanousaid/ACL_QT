@@ -29,11 +29,14 @@ Rectangle {
         }
     }
 
+    property real _lastFireMs: 0
     MouseArea {
         id: closeMA
         anchors.fill: parent
         onPressed: {
-            mouse.accepted = true
+            var now = Date.now()
+            if (now - root._lastFireMs < 250) return
+            root._lastFireMs = now
             root.clicked()
         }
     }

@@ -79,20 +79,13 @@ Window {
         rotation: 90
 
         // ── Détecteur de double-tap ──────────────────────────────────────────
-        // MouseArea : souris native (x64 / desktop)
-        // MultiPointTouchArea : touch natif eglfs/evdev (A133) — accepte le touch
-        //   AVANT la synthèse mouse → sur board seul le MPTA se déclenche.
-        //   Sur desktop (pas de touch), seul le MouseArea se déclenche.
-        //   _handleTap() déduplique les rares cas de double-fire (< 150 ms).
+        // MouseArea seul : sur eglfs/evdev (A133), Qt synthétise des mouse events
+        // depuis les touches. Le MultiPointTouchArea précédent capturait les
+        // touches sans recevoir les releases (bug driver), bloquant l'état des
+        // boutons → toggles cassés au 2e tap.
         MouseArea {
             anchors.fill: parent
             z: -1
-            onPressed: root._handleTap()
-        }
-        MultiPointTouchArea {
-            anchors.fill: parent
-            z: -1
-            touchPoints: [ TouchPoint { id: bgTouch } ]
             onPressed: root._handleTap()
         }
 
@@ -253,18 +246,8 @@ Window {
             color: "#b3000000"
             z: 40
 
-            // Backdrop : absorbe TOUS les events (mouse + touch natif) pour
-            // empêcher le double-tap detector de l'arrière-plan de continuer
-            // à compter quand le modal est ouvert.
-            MouseArea {
-                anchors.fill: parent
-                onPressed: mouse.accepted = true
-            }
-            MultiPointTouchArea {
-                anchors.fill: parent
-                touchPoints: [ TouchPoint { id: pwModalTouch } ]
-                onPressed: {}   // absorbe le touch natif
-            }
+            // Backdrop : absorbe les clics → ne ferme pas le modal sur tap arrière-plan
+            MouseArea { anchors.fill: parent; onPressed: mouse.accepted = true }
 
             Rectangle {
                 anchors.centerIn: parent
@@ -328,10 +311,18 @@ Window {
                                 font.weight:    Font.DemiBold
                             }
 
+                            // Debounce 250ms — le driver tactile A133 fire parfois
+                            // plusieurs Pressed sans Release entre les deux.
+                            property real _lastFireMs: 0
                             MouseArea {
                                 id: eyeMA
                                 anchors.fill: parent
-                                onClicked: eyeBtn.revealed = !eyeBtn.revealed
+                                onPressed: {
+                                    var now = Date.now()
+                                    if (now - eyeBtn._lastFireMs < 250) return
+                                    eyeBtn._lastFireMs = now
+                                    eyeBtn.revealed = !eyeBtn.revealed
+                                }
                             }
                         }
                     }

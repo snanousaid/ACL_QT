@@ -20,6 +20,16 @@ Rectangle {
     property string userRole: "user"
     property int    samplesPerPose: 10
 
+    // Debounce global pour les boutons tactiles (driver A133 : presses
+    // dupliqués sans release entre les deux).
+    property real _lastFireMs: 0
+    function _debounce() {
+        var now = Date.now()
+        if (now - _lastFireMs < 250) return false
+        _lastFireMs = now
+        return true
+    }
+
     // Statut backend (rempli par poll)
     property var status: ({})
 
@@ -174,7 +184,10 @@ Rectangle {
                             MouseArea {
                                 id: roleMA
                                 anchors.fill: parent
-                                onClicked: root.userRole = modelData
+                                onPressed: {
+                                    if (!root._debounce()) return
+                                    root.userRole = modelData
+                                }
                             }
                         }
                     }
@@ -196,7 +209,10 @@ Rectangle {
                         MouseArea {
                             id: minusMA
                             anchors.fill: parent
-                            onClicked: root.samplesPerPose = Math.max(3, root.samplesPerPose - 1)
+                            onPressed: {
+                                if (!root._debounce()) return
+                                root.samplesPerPose = Math.max(3, root.samplesPerPose - 1)
+                            }
                         }
                     }
 
@@ -234,7 +250,10 @@ Rectangle {
                         MouseArea {
                             id: plusMA
                             anchors.fill: parent
-                            onClicked: root.samplesPerPose = Math.min(30, root.samplesPerPose + 1)
+                            onPressed: {
+                                if (!root._debounce()) return
+                                root.samplesPerPose = Math.min(30, root.samplesPerPose + 1)
+                            }
                         }
                     }
                 }
