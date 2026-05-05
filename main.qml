@@ -316,8 +316,6 @@ Window {
                                 font.weight:    Font.DemiBold
                             }
 
-                            // Debounce 250ms — le driver tactile A133 fire parfois
-                            // plusieurs Pressed sans Release entre les deux.
                             property real _lastFireMs: 0
                             MouseArea {
                                 id: eyeMA
@@ -327,6 +325,14 @@ Window {
                                     if (now - eyeBtn._lastFireMs < 250) return
                                     eyeBtn._lastFireMs = now
                                     eyeBtn.revealed = !eyeBtn.revealed
+                                    // Qt 5.12 bug : echoMode Password ne re-masque pas
+                                    // visuellement les chars déjà affichés en Normal.
+                                    // Forcer un refresh texte quand on repasse en masqué.
+                                    if (!eyeBtn.revealed) {
+                                        var saved = pwInput.text
+                                        pwInput.text = ""
+                                        pwInput.text = saved
+                                    }
                                 }
                             }
                         }

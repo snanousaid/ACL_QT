@@ -45,7 +45,7 @@ Item {
                 font.family: "monospace"
                 echoMode:    (root.isPassword && !root.showPassword) ? TextInput.Password : TextInput.Normal
                 activeFocusOnPress: true
-                inputMethodHints:   root.isPassword
+                inputMethodHints:   (root.isPassword && !root.showPassword)
                                     ? Qt.ImhHiddenText | Qt.ImhNoPredictiveText
                                     : Qt.ImhNone
 
