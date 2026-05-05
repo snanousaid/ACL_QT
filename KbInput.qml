@@ -7,8 +7,8 @@ Item {
 
     property alias text:        inputField.text
     property alias inputItem:   inputField
-    property alias echoMode:    inputField.echoMode   // accès direct depuis l'extérieur
-    property bool   isPassword:  false
+    property bool   isPassword:   false
+    property bool   showPassword: false   // toggle : true = texte en clair
     property string placeholder: ""
     property string label:       ""
     property var    keyboard:    null
@@ -40,9 +40,9 @@ Item {
                 color:       "white"
                 font.pixelSize: 14
                 font.family: "monospace"
-                echoMode:    root.isPassword ? TextInput.Password : TextInput.Normal
-                // inputMethodHints suit l'echoMode courant (pas de binding circulaire)
-                inputMethodHints: (echoMode === TextInput.Password)
+                echoMode: (root.isPassword && !root.showPassword)
+                          ? TextInput.Password : TextInput.Normal
+                inputMethodHints: (root.isPassword && !root.showPassword)
                                   ? Qt.ImhHiddenText | Qt.ImhNoPredictiveText
                                   : Qt.ImhNone
                 activeFocusOnPress: true

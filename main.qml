@@ -324,11 +324,7 @@ Window {
                                     if (now - eyeBtn._lastFireMs < 250) return
                                     eyeBtn._lastFireMs = now
                                     eyeBtn.revealed = !eyeBtn.revealed
-                                    // Manipulation directe de echoMode (Qt 5.12 :
-                                    // plus fiable qu'un binding via showPassword).
-                                    pwInput.echoMode = eyeBtn.revealed
-                                        ? TextInput.Normal
-                                        : TextInput.Password
+                                    pwInput.showPassword = eyeBtn.revealed
                                 }
                             }
                         }
