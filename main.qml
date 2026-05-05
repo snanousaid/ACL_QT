@@ -79,10 +79,15 @@ Window {
         rotation: 90
 
         // ── Détecteur de double-tap ──────────────────────────────────────────
-        // MouseArea seul : sur eglfs/evdev (A133), Qt synthétise des mouse events
-        // depuis les touches. Le MultiPointTouchArea précédent capturait les
-        // touches sans recevoir les releases (bug driver), bloquant l'état des
-        // boutons → toggles cassés au 2e tap.
+        // Sur A133 eglfs/evdev, seul le MPTA reçoit les touch events natifs.
+        // Sans déclaration touchPoints[], il ne "possède" aucun point → ne bloque
+        // pas les releases des boutons enfants, mais fire onPressed pour le double-tap.
+        MultiPointTouchArea {
+            anchors.fill: parent
+            z: -1
+            onPressed: root._handleTap()
+        }
+        // Fallback mouse (desktop / simulateur)
         MouseArea {
             anchors.fill: parent
             z: -1
