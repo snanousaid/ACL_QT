@@ -1,8 +1,5 @@
 import QtQuick 2.10
 
-// Champ de saisie tactile — utilise Qt Virtual Keyboard (TextInput natif).
-// API maintenue compatible avec l'ancienne version :
-//   property text, isPassword, placeholder, label, keyboard (ignoré)
 Item {
     id: root
     height: col.implicitHeight
@@ -10,11 +7,11 @@ Item {
 
     property alias text:        inputField.text
     property alias inputItem:   inputField
+    property alias echoMode:    inputField.echoMode   // accès direct depuis l'extérieur
     property bool   isPassword:  false
-    property bool   showPassword: false   // toggle externe pour afficher en clair
     property string placeholder: ""
     property string label:       ""
-    property var    keyboard:    null   // ignoré — Qt VKB gère le focus automatiquement
+    property var    keyboard:    null
 
     Column {
         id: col
@@ -43,13 +40,13 @@ Item {
                 color:       "white"
                 font.pixelSize: 14
                 font.family: "monospace"
-                echoMode:    (root.isPassword && !root.showPassword) ? TextInput.Password : TextInput.Normal
+                echoMode:    root.isPassword ? TextInput.Password : TextInput.Normal
+                // inputMethodHints suit l'echoMode courant (pas de binding circulaire)
+                inputMethodHints: (echoMode === TextInput.Password)
+                                  ? Qt.ImhHiddenText | Qt.ImhNoPredictiveText
+                                  : Qt.ImhNone
                 activeFocusOnPress: true
-                inputMethodHints:   (root.isPassword && !root.showPassword)
-                                    ? Qt.ImhHiddenText | Qt.ImhNoPredictiveText
-                                    : Qt.ImhNone
 
-                // Placeholder
                 Text {
                     anchors { fill: parent; leftMargin: 0 }
                     visible: inputField.text.length === 0

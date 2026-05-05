@@ -296,7 +296,6 @@ Window {
                             width: parent.width - eyeBtn.width - 8
                             keyboard:    keyboard
                             isPassword:  true
-                            showPassword: eyeBtn.revealed
                             placeholder: "••••••••••"
                         }
 
@@ -325,14 +324,11 @@ Window {
                                     if (now - eyeBtn._lastFireMs < 250) return
                                     eyeBtn._lastFireMs = now
                                     eyeBtn.revealed = !eyeBtn.revealed
-                                    // Qt 5.12 bug : echoMode Password ne re-masque pas
-                                    // visuellement les chars déjà affichés en Normal.
-                                    // Forcer un refresh texte quand on repasse en masqué.
-                                    if (!eyeBtn.revealed) {
-                                        var saved = pwInput.text
-                                        pwInput.text = ""
-                                        pwInput.text = saved
-                                    }
+                                    // Manipulation directe de echoMode (Qt 5.12 :
+                                    // plus fiable qu'un binding via showPassword).
+                                    pwInput.echoMode = eyeBtn.revealed
+                                        ? TextInput.Normal
+                                        : TextInput.Password
                                 }
                             }
                         }
