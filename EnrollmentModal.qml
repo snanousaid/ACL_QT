@@ -738,7 +738,7 @@ Rectangle {
             Text {
                 id: doneSubtitle
                 objectName: "doneText"
-                anchors { top: doneTitle.bottom; horizontalCenter: parent.horizontalCenter; topMargin: 8
+                anchors { top: doneTitle.bottom; topMargin: 8
                           left: parent.left; right: parent.right; leftMargin: 24; rightMargin: 24 }
                 horizontalAlignment: Text.AlignHCenter
                 text: ""

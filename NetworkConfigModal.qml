@@ -355,7 +355,7 @@ Rectangle {
 
                 // SSID actuel (si connecté)
                 InfoCard {
-                    visible: root.info.wifiSsid && String(root.info.wifiSsid).length > 0
+                    visible: !!root.info.wifiSsid && String(root.info.wifiSsid).length > 0
                     width: parent.width
                     iconType: "wifi"; iconColor: "#22c55e"
                     label: "SSID"
@@ -394,7 +394,7 @@ Rectangle {
 
                 // MAC Ethernet (si dispo)
                 InfoCard {
-                    visible: root.info.ethMac && String(root.info.ethMac).length > 0
+                    visible: !!root.info.ethMac && String(root.info.ethMac).length > 0
                     width: parent.width
                     iconType: "mac"; iconColor: "#94a3b8"
                     label: "Adresse MAC"
@@ -552,7 +552,7 @@ Rectangle {
 
                             // Badge sécurité (WPA2/WPA3)
                             Rectangle {
-                                visible: modelData.security && modelData.security.length > 0
+                                visible: !!modelData.security && modelData.security.length > 0
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: secText.implicitWidth + 12; height: 18; radius: 4
                                 color: "#1e293b"; border.color: "#475569"
