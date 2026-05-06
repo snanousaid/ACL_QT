@@ -62,6 +62,15 @@ AppController::AppController(QObject *parent)
     m_accessResetTimer->setInterval(3000);
     connect(m_accessResetTimer, &QTimer::timeout,
             this, &AppController::resetFaceAccess);
+
+    // ── Timer stream idle : 30→15 FPS après 5 s sans visage ─────────────────
+    m_idleStreamTimer = new QTimer(this);
+    m_idleStreamTimer->setSingleShot(true);
+    m_idleStreamTimer->setInterval(5000);
+    connect(m_idleStreamTimer, &QTimer::timeout, this, [this] {
+        if (m_camera) m_camera->setIdleStream(true);
+    });
+    m_idleStreamTimer->start();   // demarre en idle au boot
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -157,6 +166,12 @@ void AppController::onCamFaceStatus(bool face, bool inRoi, bool recognized)
         m_faceInRoi   = inRoi;
         emit faceStatusChanged();
     }
+
+    // ── Stream adaptatif : 30 FPS si visage présent, 15 FPS sinon ─────────────
+    if (face) {
+        if (m_camera) m_camera->setIdleStream(false);
+        m_idleStreamTimer->start();        // reset 5 s timer
+    }
 }
 
 void AppController::onCamAccessGranted(const QString &name, float score)
@@ -210,6 +225,11 @@ void AppController::pauseRecognition()
 void AppController::resumeRecognition()
 {
     m_face->resume();
+}
+
+void AppController::setStreamPaused(bool paused)
+{
+    if (m_camera) m_camera->setPaused(paused);
 }
 
 // ── Face users (FaceWorker/FaceDb) ───────────────────────────────────────────

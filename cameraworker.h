@@ -20,6 +20,11 @@ public:
 
     void stop();
 
+    // Pause UI : skip emit + push, capture continue à 5 FPS keepalive.
+    void setPaused(bool paused);
+    // Idle stream : 15 FPS au lieu de 30 quand aucun visage depuis longtemps.
+    void setIdleStream(bool idle);
+
 signals:
     void frameReady(const QImage &image);
 
@@ -27,10 +32,15 @@ protected:
     void run() override;
 
 private:
-    static const int CAM_W   = 640;
-    static const int CAM_H   = 480;
-    static const int CAM_FPS = 30;
+    static const int CAM_W       = 640;
+    static const int CAM_H       = 480;
+    static const int CAM_FPS     = 30;
+    static const int SLEEP_ACTIVE = 33;   // ~30 FPS
+    static const int SLEEP_IDLE   = 66;   // ~15 FPS
+    static const int SLEEP_PAUSED = 200;  // ~5 FPS keepalive (drain V4L2)
 
     QAtomicInt   m_running{0};
+    QAtomicInt   m_paused{0};
+    QAtomicInt   m_idleStream{0};
     FrameQueue  *m_queue;     // partagée avec FaceWorker (non-owned)
 };

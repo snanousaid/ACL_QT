@@ -34,6 +34,10 @@ public:
 
     Q_INVOKABLE void pauseRecognition();
     Q_INVOKABLE void resumeRecognition();
+    // Pause/resume du flux vidéo UI seul (CameraWorker).
+    // Permet de couper le flux quand l'admin est ouvert SANS impacter
+    // l'enrôlement qui doit garder la caméra active.
+    Q_INVOKABLE void setStreamPaused(bool paused);
 
     // ── Face users (C++ — FaceDb via CameraWorker) ──────────────────────────
     Q_INVOKABLE void listFaceUsers();
@@ -109,6 +113,7 @@ private:
     CameraWorker          *m_camera;
     FaceWorker            *m_face;
     QTimer                *m_accessResetTimer;
+    QTimer                *m_idleStreamTimer;   // bascule 30→15 FPS après 5s sans visage
 
     // Dernier statut enrollment pour pollEnrollStatus()
     QVariantMap m_lastEnrollStatus;

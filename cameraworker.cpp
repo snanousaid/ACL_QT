@@ -10,6 +10,8 @@ CameraWorker::CameraWorker(FrameQueue *queue, QObject *parent)
     : QThread(parent), m_queue(queue) {}
 CameraWorker::~CameraWorker() { stop(); wait(); }
 void CameraWorker::stop() { m_running.store(0); }
+void CameraWorker::setPaused(bool p)     { m_paused.store(p ? 1 : 0); }
+void CameraWorker::setIdleStream(bool i) { m_idleStream.store(i ? 1 : 0); }
 
 void CameraWorker::run()
 {
@@ -26,7 +28,9 @@ CameraWorker::CameraWorker(FrameQueue *queue, QObject *parent)
     : QThread(parent), m_queue(queue) {}
 CameraWorker::~CameraWorker() { stop(); wait(); }
 
-void CameraWorker::stop() { m_running.store(0); }
+void CameraWorker::stop()                { m_running.store(0); }
+void CameraWorker::setPaused(bool p)     { m_paused.store(p ? 1 : 0); }
+void CameraWorker::setIdleStream(bool i) { m_idleStream.store(i ? 1 : 0); }
 
 void CameraWorker::run()
 {
@@ -54,16 +58,24 @@ void CameraWorker::run()
         cap >> frame;
         if (frame.empty()) { QThread::msleep(10); continue; }
 
-        // ── Push BGR vers FaceWorker (latest wins, non-bloquant) ──────────────
+        // ── Pause UI : on draine le buffer V4L2 mais on ne pousse rien ──────
+        // (FaceWorker est pausé aussi → la queue ne sert à rien)
+        if (m_paused.load()) {
+            QThread::msleep(SLEEP_PAUSED);
+            continue;
+        }
+
+        // ── Push BGR vers FaceWorker (latest wins, non-bloquant) ─────────────
         if (m_queue) m_queue->push(frame);
 
-        // ── Conversion + emit pour le stream UI ────────────────────────────────
+        // ── Conversion + emit pour le stream UI ─────────────────────────────
         cv::cvtColor(frame, rgb, cv::COLOR_BGR2RGB);
         emit frameReady(QImage(rgb.data, rgb.cols, rgb.rows,
                                static_cast<int>(rgb.step),
                                QImage::Format_RGB888).copy());
 
-        QThread::msleep(33); // ~30 fps
+        // ── Cadence adaptative : 15 FPS si idle, 30 FPS sinon ───────────────
+        QThread::msleep(m_idleStream.load() ? SLEEP_IDLE : SLEEP_ACTIVE);
     }
 
     cap.release();

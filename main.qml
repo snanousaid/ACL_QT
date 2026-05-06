@@ -35,6 +35,14 @@ Window {
 
     property bool adminVisible: false
 
+    // ── Pause du flux vidéo UI (CameraWorker) ────────────────────────────────
+    // Quand un modal admin est ouvert MAIS pas l'enrôlement : le stream est
+    // inutile (UI cachée) → on coupe cvtColor + emit côté C++ pour économiser
+    // ~30 % CPU. L'enrôlement DOIT garder la caméra active (pose detection).
+    property bool streamShouldPause: (passwordModal.visible || root.adminVisible)
+                                  && !enrollment.visible
+    onStreamShouldPauseChanged: controller.setStreamPaused(streamShouldPause)
+
     // Compteur de double-tap
     property int  _tapCount:  0
     property real _lastTapMs: 0   // déduplication touch natif + synthèse mouse
