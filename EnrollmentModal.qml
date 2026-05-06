@@ -33,8 +33,18 @@ Rectangle {
     // Statut backend (rempli par poll)
     property var status: ({})
 
-    // URL de base pour les thumbnails de poses
-    property string _baseUrl: controller ? controller.mjpegUrl.replace("/video_feed", "") : ""
+    // Compteurs dérivés du backend pour la progress bar globale
+    readonly property int totalCount: {
+        var p = root.status.enroll_poses
+        if (!p || p.length === 0) return 0
+        var n = 0
+        for (var i = 0; i < p.length; i++) n += p[i].count
+        return n
+    }
+    readonly property int totalTarget: root.samplesPerPose * 5
+
+    // Index numérique de l'étape pour le stepper (0=form, 1=live, 2=done)
+    readonly property int stepIndex: state === "form" ? 0 : (state === "live" ? 1 : 2)
 
     signal closed()
 
@@ -104,24 +114,87 @@ Rectangle {
         color: "#0f172a"
         border.color: "#334155"
 
-        // ---- Header ----
+        // ---- Header avec stepper visuel ----
         Rectangle {
             id: hdr
             anchors { top: parent.top; left: parent.left; right: parent.right }
-            height: 60
+            height: 88
             color: "transparent"
 
             Text {
-                anchors { left: parent.left; leftMargin: 20; verticalCenter: parent.verticalCenter }
+                anchors { left: parent.left; leftMargin: 20; top: parent.top; topMargin: 12 }
                 text: root.state === "form" ? "Nouvel utilisateur"
                     : root.state === "live" ? "Enrôlement — " + root.userName
                     : "Terminé"
-                color: "white"; font.pixelSize: 16; font.weight: Font.Bold
+                color: "white"; font.pixelSize: 15; font.weight: Font.Bold
             }
             CloseIcon {
-                anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                anchors { right: parent.right; rightMargin: 14; top: parent.top; topMargin: 8 }
                 onClicked: root.close()
             }
+
+            // Stepper : 3 ronds reliés par des lignes
+            Row {
+                id: stepperRow
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: 14
+                          leftMargin: 28; rightMargin: 28 }
+                spacing: 0
+
+                Repeater {
+                    model: [
+                        { idx: 0, label: "Infos" },
+                        { idx: 1, label: "Capture" },
+                        { idx: 2, label: "Terminé" }
+                    ]
+                    Item {
+                        property bool isLast:    modelData.idx === 2
+                        property bool isActive:  root.stepIndex === modelData.idx
+                        property bool isDone:    root.stepIndex >  modelData.idx
+                        width:  isLast ? 32 : (stepperRow.width - 32 * 3) / 2 + 32
+                        height: 32
+
+                        // Ligne reliant ce step au suivant (sauf dernier)
+                        Rectangle {
+                            visible: !parent.isLast
+                            anchors { left: parent.left; leftMargin: 32; right: parent.right
+                                      verticalCenter: parent.verticalCenter }
+                            height: 2
+                            color: parent.isDone ? "#22c55e" : "#334155"
+                            Behavior on color { ColorAnimation { duration: 300 } }
+                        }
+
+                        // Cercle du step
+                        Rectangle {
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                            width: 32; height: 32; radius: 16
+                            color: parent.isActive ? "#2563eb" : (parent.isDone ? "#22c55e" : "#1e293b")
+                            border.color: parent.isActive ? "#3b82f6" : (parent.isDone ? "#22c55e" : "#334155")
+                            border.width: 2
+                            Behavior on color { ColorAnimation { duration: 200 } }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: parent.parent.isDone ? "✓" : (modelData.idx + 1)
+                                color: "white"
+                                font.pixelSize: parent.parent.isDone ? 16 : 13
+                                font.weight: Font.Bold
+                            }
+                        }
+
+                        // Label sous le cercle
+                        Text {
+                            anchors { left: parent.left; top: parent.bottom; topMargin: 2 }
+                            width: 60
+                            horizontalAlignment: Text.AlignHCenter
+                            x: 32 / 2 - width / 2
+                            text: modelData.label
+                            color: parent.isActive ? "#cbd5e1" : "#64748b"
+                            font.pixelSize: 9; font.weight: Font.DemiBold
+                        }
+                    }
+                }
+            }
+
             Rectangle {
                 anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
                 height: 1; color: "#1e293b"
@@ -298,11 +371,11 @@ Rectangle {
                 margins: 12
             }
 
-            // MJPEG preview (carré centré)
+            // MJPEG preview agrandi
             Rectangle {
                 id: previewBox
                 anchors { top: parent.top; left: parent.left; right: parent.right }
-                height: 200
+                height: 280
                 color: "#000"; radius: 12
                 clip: true
 
@@ -339,7 +412,7 @@ Rectangle {
                         var cy = height / 2
                         var rx = width  * 0.28
                         var ry = height * 0.42
-                        var k  = 0.5523  // approximation Bézier d'une ellipse
+                        var k  = 0.5523
 
                         ctx.setLineDash(inRoi ? [] : [8, 5])
                         ctx.lineWidth   = inRoi ? 3 : 2
@@ -362,12 +435,56 @@ Rectangle {
                     border.color: "#22d3ee"; border.width: 2
                     radius: 12
                 }
+
+                // Flash vert d'animation lors d'une capture (declenche par totalCount change)
+                Rectangle {
+                    id: flashOverlay
+                    anchors.fill: parent
+                    radius: 12
+                    color: "#22c55e"
+                    opacity: 0
+                    NumberAnimation {
+                        id: flashAnim
+                        target: flashOverlay
+                        property: "opacity"
+                        from: 0.35; to: 0
+                        duration: 350
+                        easing.type: Easing.OutQuad
+                    }
+                }
+            }
+
+            // Trigger pulse à chaque incrément de totalCount
+            Connections {
+                target: root
+                onTotalCountChanged: if (root.totalCount > 0) flashAnim.restart()
+            }
+
+            // Progress bar globale + compteur
+            Rectangle {
+                id: progressBar
+                anchors { top: previewBox.bottom; left: parent.left; right: parent.right; topMargin: 10 }
+                height: 6; radius: 3
+                color: "#1e293b"
+                Rectangle {
+                    height: parent.height; radius: parent.radius
+                    width: parent.width * (root.totalTarget > 0
+                                           ? Math.min(1, root.totalCount / root.totalTarget) : 0)
+                    color: "#22d3ee"
+                    Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                }
+            }
+            Text {
+                id: progressLabel
+                anchors { top: progressBar.bottom; right: parent.right; topMargin: 4 }
+                text: root.totalCount + " / " + root.totalTarget + " échantillons"
+                color: "#64748b"; font.pixelSize: 10
             }
 
             // Message status
             Text {
                 id: msgTxt
-                anchors { top: previewBox.bottom; left: parent.left; right: parent.right; topMargin: 10 }
+                anchors { top: progressLabel.bottom; left: parent.left; right: parent.right; topMargin: 6 }
                 horizontalAlignment: Text.AlignHCenter
                 text: root.status.enroll_msg || "Positionnez votre visage…"
                 color: "#cbd5e1"; font.pixelSize: 12
@@ -377,7 +494,7 @@ Rectangle {
             // Grille thumbnails 5 poses
             Row {
                 id: poseGrid
-                anchors { top: msgTxt.bottom; left: parent.left; right: parent.right; topMargin: 12 }
+                anchors { top: msgTxt.bottom; left: parent.left; right: parent.right; topMargin: 10 }
                 spacing: 4
 
                 Repeater {
@@ -392,17 +509,73 @@ Rectangle {
                         color:  modelData.done ? "#0f3a26" : (isCurrent ? "#0c2a3a" : "#1e293b")
                         border.width: 1.5
                         border.color: modelData.done ? "#22c55e" : (isCurrent ? "#22d3ee" : "#334155")
+                        Behavior on color       { ColorAnimation { duration: 250 } }
+                        Behavior on border.color { ColorAnimation { duration: 250 } }
 
-                        // Icône centrale (varie selon état : current / done / idle)
-                        Text {
-                            anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 16 }
-                            text:  modelData.done ? "✓" : (isCurrent ? "◎" : "◉")
-                            color: modelData.done ? "#22c55e" : (isCurrent ? "#22d3ee" : "#475569")
-                            font.pixelSize: modelData.done ? 28 : 24
-                            font.weight: Font.Bold
+                        // Picto directionnel Canvas (cible / flèches)
+                        Canvas {
+                            anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 12 }
+                            width: 28; height: 28
+                            property string poseId: modelData.id
+                            property bool   done:   modelData.done
+                            property bool   curr:   modelData.id === root.status.enroll_current_pose
+                            onDoneChanged: requestPaint()
+                            onCurrChanged: requestPaint()
+                            Component.onCompleted: requestPaint()
+
+                            onPaint: {
+                                var ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                var col = done ? "#22c55e" : (curr ? "#22d3ee" : "#475569")
+                                ctx.strokeStyle = col
+                                ctx.fillStyle   = col
+                                ctx.lineWidth   = 2.2
+                                ctx.lineCap     = "round"
+                                ctx.lineJoin    = "round"
+
+                                if (done) {
+                                    // Checkmark
+                                    ctx.beginPath()
+                                    ctx.moveTo(width*0.20, height*0.55)
+                                    ctx.lineTo(width*0.42, height*0.78)
+                                    ctx.lineTo(width*0.82, height*0.28)
+                                    ctx.stroke()
+                                } else if (poseId === "center") {
+                                    // Cible : 2 cercles concentriques + point
+                                    ctx.beginPath(); ctx.arc(width/2, height/2, width*0.40, 0, Math.PI*2); ctx.stroke()
+                                    ctx.beginPath(); ctx.arc(width/2, height/2, width*0.20, 0, Math.PI*2); ctx.stroke()
+                                    ctx.beginPath(); ctx.arc(width/2, height/2, 2.5, 0, Math.PI*2); ctx.fill()
+                                } else if (poseId === "left" || poseId === "right") {
+                                    // Flèche horizontale
+                                    var dir = (poseId === "left") ? -1 : 1
+                                    var cy  = height/2, cx = width/2
+                                    ctx.beginPath()
+                                    ctx.moveTo(cx - dir*width*0.35, cy)
+                                    ctx.lineTo(cx + dir*width*0.35, cy)
+                                    ctx.stroke()
+                                    ctx.beginPath()
+                                    ctx.moveTo(cx + dir*width*0.15, cy - height*0.20)
+                                    ctx.lineTo(cx + dir*width*0.35, cy)
+                                    ctx.lineTo(cx + dir*width*0.15, cy + height*0.20)
+                                    ctx.stroke()
+                                } else if (poseId === "up" || poseId === "down") {
+                                    // Flèche verticale
+                                    var dirV = (poseId === "up") ? -1 : 1
+                                    var cxV  = width/2, cyV = height/2
+                                    ctx.beginPath()
+                                    ctx.moveTo(cxV, cyV - dirV*height*0.35)
+                                    ctx.lineTo(cxV, cyV + dirV*height*0.35)
+                                    ctx.stroke()
+                                    ctx.beginPath()
+                                    ctx.moveTo(cxV - width*0.20, cyV - dirV*height*0.15)
+                                    ctx.lineTo(cxV, cyV - dirV*height*0.35)
+                                    ctx.lineTo(cxV + width*0.20, cyV - dirV*height*0.15)
+                                    ctx.stroke()
+                                }
+                            }
                         }
 
-                        // Compteur central
+                        // Compteur
                         Text {
                             anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 50 }
                             visible: !modelData.done
@@ -411,7 +584,7 @@ Rectangle {
                             font.pixelSize: 11; font.weight: Font.DemiBold
                         }
 
-                        // Badge "REQ" pour les poses obligatoires
+                        // Badge "REQ"
                         Rectangle {
                             anchors { top: parent.top; right: parent.right; margins: 3 }
                             visible: modelData.required && !modelData.done
@@ -469,29 +642,143 @@ Rectangle {
 
         // ─────────── État DONE ──────────────────────────────────────────────
         Item {
+            id: doneItem
             visible: root.state === "done"
-            anchors { fill: parent; topMargin: 60 }
+            anchors { fill: parent; topMargin: 88 }
 
-            Column {
-                anchors.centerIn: parent
-                spacing: 16
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "✓"; color: "#22c55e"; font.pixelSize: 64
+            // Trigger animations à chaque entrée dans le state
+            onVisibleChanged: {
+                if (visible) {
+                    successHalo.scale     = 0
+                    successCircle.scale   = 0
+                    successCircle.opacity = 0
+                    doneTitle.opacity     = 0
+                    doneSubtitle.opacity  = 0
+                    closeBtn.opacity      = 0
+                    successAnim.start()
                 }
-                Text {
-                    id: doneText
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Utilisateur enrôlé."
-                    color: "white"; font.pixelSize: 14; font.weight: Font.DemiBold
+            }
+
+            // Halo concentrique animé (effet de pulsation)
+            Rectangle {
+                id: successHalo
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: 20
+                width: 160; height: 160; radius: 80
+                color: "#22c55e15"
+                border.color: "#22c55e55"; border.width: 2
+                scale: 0
+                transformOrigin: Item.Center
+                SequentialAnimation on opacity {
+                    loops: Animation.Infinite
+                    running: doneItem.visible
+                    NumberAnimation { from: 0.7; to: 0.2; duration: 1400; easing.type: Easing.InOutQuad }
+                    NumberAnimation { from: 0.2; to: 0.7; duration: 1400; easing.type: Easing.InOutQuad }
                 }
-                Rectangle {
-                    width: 160; height: 40; radius: 10
-                    color: "#2563eb"
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    Text { anchors.centerIn: parent; text: "Fermer"; color: "white"; font.pixelSize: 12; font.weight: Font.Bold }
-                    MouseArea { anchors.fill: parent; onPressed: root.close() }
+            }
+
+            // Cercle plein vert avec checkmark dessiné en Canvas
+            Rectangle {
+                id: successCircle
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: 50
+                width: 100; height: 100; radius: 50
+                color: "#22c55e"
+                opacity: 0
+                scale: 0
+                transformOrigin: Item.Center
+
+                Canvas {
+                    id: checkCanvas
+                    anchors.fill: parent
+                    property real progress: 0
+                    onProgressChanged: requestPaint()
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        ctx.strokeStyle = "white"
+                        ctx.lineWidth   = 7
+                        ctx.lineCap     = "round"
+                        ctx.lineJoin    = "round"
+
+                        // Checkmark : 2 segments. progress 0..1 dessine progressivement.
+                        var p1x = width*0.28, p1y = height*0.52
+                        var p2x = width*0.45, p2y = height*0.68
+                        var p3x = width*0.74, p3y = height*0.36
+                        var seg1Len = 1.0   // poids relatif segment 1
+                        var seg2Len = 1.5   // poids relatif segment 2
+                        var total   = seg1Len + seg2Len
+                        var p       = progress
+
+                        ctx.beginPath()
+                        ctx.moveTo(p1x, p1y)
+                        if (p * total <= seg1Len) {
+                            var t1 = (p * total) / seg1Len
+                            ctx.lineTo(p1x + (p2x - p1x) * t1, p1y + (p2y - p1y) * t1)
+                        } else {
+                            ctx.lineTo(p2x, p2y)
+                            var t2 = (p * total - seg1Len) / seg2Len
+                            ctx.lineTo(p2x + (p3x - p2x) * t2, p2y + (p3y - p2y) * t2)
+                        }
+                        ctx.stroke()
+                    }
                 }
+            }
+
+            Text {
+                id: doneTitle
+                anchors { top: successCircle.bottom; horizontalCenter: parent.horizontalCenter; topMargin: 24 }
+                text: "Utilisateur enrôlé !"
+                color: "white"; font.pixelSize: 18; font.weight: Font.Bold
+                opacity: 0
+            }
+
+            Text {
+                id: doneSubtitle
+                objectName: "doneText"
+                anchors { top: doneTitle.bottom; horizontalCenter: parent.horizontalCenter; topMargin: 8
+                          left: parent.left; right: parent.right; leftMargin: 24; rightMargin: 24 }
+                horizontalAlignment: Text.AlignHCenter
+                text: ""
+                color: "#94a3b8"; font.pixelSize: 12
+                wrapMode: Text.WordWrap
+                opacity: 0
+            }
+
+            // Compatibilité ascendante : alias `doneText` utilisé par onEnrollResult
+            // pour pousser le message backend.
+            Item {
+                id: doneText
+                property string text: ""
+                onTextChanged: doneSubtitle.text = text
+            }
+
+            Rectangle {
+                id: closeBtn
+                anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: 24 }
+                width: 180; height: 44; radius: 10
+                color: closeMA.pressed ? "#1d4ed8" : "#2563eb"
+                opacity: 0
+                Text { anchors.centerIn: parent; text: "Fermer"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold }
+                MouseArea { id: closeMA; anchors.fill: parent; onPressed: root.close() }
+            }
+
+            // Séquence d'animation : halo+cercle scale → checkmark draw → texte fade
+            SequentialAnimation {
+                id: successAnim
+                ParallelAnimation {
+                    NumberAnimation { target: successHalo;   property: "scale";   from: 0; to: 1; duration: 400; easing.type: Easing.OutBack }
+                    NumberAnimation { target: successCircle; property: "scale";   from: 0; to: 1; duration: 400; easing.type: Easing.OutBack }
+                    NumberAnimation { target: successCircle; property: "opacity"; from: 0; to: 1; duration: 250 }
+                }
+                NumberAnimation { target: checkCanvas; property: "progress"; from: 0; to: 1; duration: 400; easing.type: Easing.OutQuad }
+                ParallelAnimation {
+                    NumberAnimation { target: doneTitle;    property: "opacity"; from: 0; to: 1; duration: 300 }
+                    NumberAnimation { target: doneSubtitle; property: "opacity"; from: 0; to: 1; duration: 300 }
+                }
+                NumberAnimation { target: closeBtn; property: "opacity"; from: 0; to: 1; duration: 250 }
             }
         }
     }
