@@ -29,7 +29,7 @@ QString runOpenCvTest(const QString &modelsDir)
     qDebug() << "[OpenCV] camera ok —" << frame.cols << "x" << frame.rows;
 
     // ── 3. YuNet (détection) ──────────────────────────────────────────────
-    std::string yunet = (modelsDir + "/face_detection_yunet_2023mar.onnx").toStdString();
+    std::string yunet = (modelsDir + "/face_detection_yunet_2022mar.onnx").toStdString();
     cv::Ptr<cv::FaceDetectorYN> detector;
     try {
         detector = cv::FaceDetectorYN::create(yunet, "", {frame.cols, frame.rows});
