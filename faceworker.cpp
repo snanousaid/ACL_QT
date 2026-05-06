@@ -323,13 +323,36 @@ void FaceWorker::run()
 
     m_running.store(1);
 
+    // ── Optim CPU ──────────────────────────────────────────────────────────────
+    // 1. Motion gating  : skip total si pas de mouvement (idle)
+    // 2. Rate limiting  : 3 FPS idle, 10 FPS actif (frame skipping)
+    // 3. Downscale      : YuNet sur 0.5× (4× moins de pixels)
+    // 4. SFace cooldown : ne pas re-matcher 30×/s le même visage stable
+    constexpr float   MOTION_THRESH       = 0.008f;   // 0.8 % pixels changés
+    constexpr int     IDLE_INTERVAL       = 10;       // ~3 FPS si caméra 30 FPS
+    constexpr int     ACTIVE_INTERVAL     = 3;        // ~10 FPS
+    constexpr qint64  IDLE_TIMEOUT_MS     = 2000;
+    constexpr qint64  SFACE_COOLDOWN_MS   = 2000;
+    constexpr int     SFACE_BBOX_TOL_PX   = 40;
+    constexpr float   DETECT_SCALE        = 0.5f;
+
     cv::Mat frame, faces, aligned, feat;
-    qint64  lastEventMs = 0;
+    cv::Mat prevGray, smallFrame, gray;
+
+    qint64  lastEventMs   = 0;
     QString lastEventName;
+    qint64  lastFaceMs    = 0;
+    qint64  lastSFaceMs   = 0;
+    cv::Rect lastFaceBox;
+    QString lastMatchName;
+    bool    lastMatchActive = false;
+    float   lastMatchScore  = 0.0f;
+    int     frameCounter    = 0;
 
     while (m_running.load()) {
         if (!m_queue->pop(frame, 200)) continue;
         if (frame.empty()) continue;
+        frameCounter++;
 
         // ── Mode courant ────────────────────────────────────────────────────────
         Mode currentMode;
@@ -340,20 +363,64 @@ void FaceWorker::run()
             continue;
         }
 
-        // ── Luminosité ──────────────────────────────────────────────────────────
-        float bright = frameBrightness(frame);
+        const qint64 nowMs    = QDateTime::currentMSecsSinceEpoch();
+        const bool   enrolling = (currentMode == Enrolling);
+        const bool   isIdle    = !enrolling && (nowMs - lastFaceMs > IDLE_TIMEOUT_MS);
+
+        // ── (1) Motion gate + (proxy luminosité sur la même grayscale) ──────────
+        // Une seule conversion BGR→gray downscalée 80×60, réutilisée pour le
+        // diff de mouvement ET le check luminosité. ~0.5 ms vs ~5 ms full-res HSV.
+        cv::resize(frame, gray, cv::Size(80, 60), 0, 0, cv::INTER_AREA);
+        cv::cvtColor(gray, gray, cv::COLOR_BGR2GRAY);
+
+        float bright = static_cast<float>(cv::mean(gray)[0]);
         if (bright < BRIGHT_MIN || bright > BRIGHT_MAX) {
+            prevGray = gray.clone();
             emit faceStatusChanged(false, false, false);
             continue;
         }
 
-        // ── Détection YuNet ─────────────────────────────────────────────────────
-        detector->setInputSize({frame.cols, frame.rows});
-        detector->detect(frame, faces);
+        bool motion = true;
+        if (!prevGray.empty()) {
+            cv::Mat diff;
+            cv::absdiff(gray, prevGray, diff);
+            cv::threshold(diff, diff, 25, 255, cv::THRESH_BINARY);
+            float ratio = static_cast<float>(cv::countNonZero(diff))
+                          / static_cast<float>(gray.rows * gray.cols);
+            motion = ratio > MOTION_THRESH;
+        }
+        prevGray = gray.clone();
+
+        // En idle sans mouvement → skip total (le plus gros gain CPU)
+        if (isIdle && !motion) {
+            emit faceStatusChanged(false, false, false);
+            continue;
+        }
+
+        // ── (2) Rate limiting ───────────────────────────────────────────────────
+        const int interval = enrolling ? 1
+                                       : (isIdle ? IDLE_INTERVAL : ACTIVE_INTERVAL);
+        if (frameCounter % interval != 0) continue;
+
+        // ── (3) Détection YuNet sur frame downscalée ────────────────────────────
+        cv::resize(frame, smallFrame, cv::Size(), DETECT_SCALE, DETECT_SCALE,
+                   cv::INTER_LINEAR);
+        detector->setInputSize({smallFrame.cols, smallFrame.rows});
+        detector->detect(smallFrame, faces);
+
+        // Remap coords (cols 0..13 = bbox + 5 landmarks) vers full-res pour SFace
+        if (!faces.empty() && faces.rows > 0) {
+            const float invScale = 1.0f / DETECT_SCALE;
+            for (int i = 0; i < faces.rows; i++)
+                for (int j = 0; j < 14; j++)
+                    faces.at<float>(i, j) *= invScale;
+        }
 
         bool hasFace = (!faces.empty() && faces.rows > 0);
         bool inRoi   = false;
         bool matched = false;
+
+        if (hasFace) lastFaceMs = nowMs;
 
         if (hasFace) {
             cv::Mat best = faces.row(bestFaceIdx(faces));
@@ -361,22 +428,22 @@ void FaceWorker::run()
                               ROI_X, ROI_Y, ROI_W, ROI_H);
 
             if (inRoi) {
-                QVector<float> emb;
-                try {
-                    recognizer->alignCrop(frame, best, aligned);
-                    recognizer->feature(aligned, feat);
-                    emb = matToVector(feat);
-                } catch (const cv::Exception &e) {
-                    qDebug() << "[FaceWorker] embed error:" << e.what();
-                    emit faceStatusChanged(hasFace, inRoi, false);
-                    continue;
-                }
-
                 if (currentMode == Enrolling) {
                     // ── Mode enrôlement multi-pose ─────────────────────────────
+                    // Embedding requis pour stocker les samples.
+                    QVector<float> emb;
+                    try {
+                        recognizer->alignCrop(frame, best, aligned);
+                        recognizer->feature(aligned, feat);
+                        emb = matToVector(feat);
+                    } catch (const cv::Exception &e) {
+                        qDebug() << "[FaceWorker] embed error:" << e.what();
+                        emit faceStatusChanged(hasFace, inRoi, false);
+                        continue;
+                    }
+
                     float yunetScore = best.at<float>(0, 14);
                     float faceWidth  = best.at<float>(0, 2);
-                    qint64 nowMs     = QDateTime::currentMSecsSinceEpoch();
 
                     QString pose = estimatePose(best);
 
@@ -475,21 +542,56 @@ void FaceWorker::run()
                     }
                 } else {
                     // ── Mode détection — match + événement ─────────────────────
+                    // (4) SFace cooldown : si même visage à la même position
+                    // depuis <2 s, on réutilise le dernier match au lieu de
+                    // refaire alignCrop+feature+match (le plus coûteux).
+                    cv::Rect curBox(static_cast<int>(best.at<float>(0, 0)),
+                                    static_cast<int>(best.at<float>(0, 1)),
+                                    static_cast<int>(best.at<float>(0, 2)),
+                                    static_cast<int>(best.at<float>(0, 3)));
+                    bool sameFace = (lastFaceBox.width > 0)
+                                 && std::abs(curBox.x - lastFaceBox.x) < SFACE_BBOX_TOL_PX
+                                 && std::abs(curBox.y - lastFaceBox.y) < SFACE_BBOX_TOL_PX;
+                    bool sfaceFresh = (nowMs - lastSFaceMs) < SFACE_COOLDOWN_MS;
+
+                    QString name;
                     float   score  = 0.0f;
                     bool    active = true;
-                    QString name;
-                    {
-                        QMutexLocker l(&m_mutex);
-                        name = m_db.match(emb, MATCH_THRESH, &score, &active);
+
+                    if (sameFace && sfaceFresh && !lastMatchName.isEmpty()) {
+                        // Cooldown actif → on skip alignCrop+feature+match
+                        name   = lastMatchName;
+                        score  = lastMatchScore;
+                        active = lastMatchActive;
+                    } else {
+                        // Pas de cooldown → calcul embedding + match
+                        QVector<float> emb;
+                        try {
+                            recognizer->alignCrop(frame, best, aligned);
+                            recognizer->feature(aligned, feat);
+                            emb = matToVector(feat);
+                        } catch (const cv::Exception &e) {
+                            qDebug() << "[FaceWorker] embed error:" << e.what();
+                            emit faceStatusChanged(hasFace, inRoi, false);
+                            continue;
+                        }
+                        {
+                            QMutexLocker l(&m_mutex);
+                            name = m_db.match(emb, MATCH_THRESH, &score, &active);
+                        }
+                        lastSFaceMs     = nowMs;
+                        lastFaceBox     = curBox;
+                        lastMatchName   = name;
+                        lastMatchScore  = score;
+                        lastMatchActive = active;
                     }
                     matched = !name.isEmpty() && active;
 
                     if (!name.isEmpty()) {
-                        qint64 now      = QDateTime::currentMSecsSinceEpoch();
-                        bool   cooldown = (now - lastEventMs > COOLDOWN_MS)
-                                       || (name != lastEventName);
-                        if (cooldown) {
-                            lastEventMs   = now;
+                        bool eventCooldown = (nowMs - lastEventMs > COOLDOWN_MS)
+                                          || (name != lastEventName);
+                        if (eventCooldown) {
+                            lastEventMs   = nowMs;
                             lastEventName = name;
                             if (active)
                                 emit accessGranted(name, score);
