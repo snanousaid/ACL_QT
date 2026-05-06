@@ -12,5 +12,6 @@
         <file>KvRow.qml</file>
         <file>CloseIcon.qml</file>
         <file>Spinner.qml</file>
+        <file>InfoCard.qml</file>
     </qresource>
 </RCC>

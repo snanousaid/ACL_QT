@@ -87,8 +87,7 @@ Rectangle {
         }
     }
 
-    // Backdrop : absorbe les taps en dehors de la carte → ne ferme pas le modal
-    // sur tap accidentel (sinon perte de saisie). Close uniquement via le X.
+    // Backdrop : absorbe les taps → ne ferme pas le modal sur tap arrière-plan
     MouseArea { anchors.fill: parent; onPressed: mouse.accepted = true }
 
     // ── Carte ───────────────────────────────────────────────────────────────
@@ -96,10 +95,10 @@ Rectangle {
         id: card
         anchors.centerIn: parent
         width:  parent.width  - 24
-        // Hauteur réduite quand le clavier virtuel est ouvert (laisse la place).
-        height: Qt.inputMethod.visible ? Math.min(parent.height - 40,
-                                                   parent.height - Qt.inputMethod.keyboardRectangle.height - 24)
-                                       : parent.height - 40
+        height: Qt.inputMethod.visible
+                ? Math.min(parent.height - 40,
+                           parent.height - Qt.inputMethod.keyboardRectangle.height - 24)
+                : parent.height - 40
         Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
         radius: 20
         color: "#0f172a"
@@ -111,26 +110,47 @@ Rectangle {
         Rectangle {
             id: hdr
             anchors { top: parent.top; left: parent.left; right: parent.right }
-            height: 58
+            height: 64
             color: "transparent"
 
             Row {
                 anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
                 spacing: 12
+                // Icône router (Canvas : 2 rectangles empilés stylisés)
                 Rectangle {
-                    width: 36; height: 36; radius: 10
+                    width: 38; height: 38; radius: 10
                     color: "#3b82f620"
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 14; height: 14; radius: 7
-                        color: "#3b82f6"
+                    anchors.verticalCenter: parent.verticalCenter
+                    Canvas {
+                        anchors.fill: parent
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.clearRect(0, 0, width, height)
+                            ctx.strokeStyle = "#60a5fa"
+                            ctx.fillStyle   = "#60a5fa"
+                            ctx.lineWidth   = 1.7
+                            ctx.lineJoin    = "round"
+                            // Rectangle haut (top router unit)
+                            ctx.strokeRect(width*0.20, height*0.28, width*0.60, height*0.16)
+                            // Rectangle bas
+                            ctx.strokeRect(width*0.20, height*0.50, width*0.60, height*0.16)
+                            // Antennes
+                            ctx.beginPath()
+                            ctx.moveTo(width*0.32, height*0.28); ctx.lineTo(width*0.32, height*0.18)
+                            ctx.moveTo(width*0.50, height*0.28); ctx.lineTo(width*0.50, height*0.16)
+                            ctx.moveTo(width*0.68, height*0.28); ctx.lineTo(width*0.68, height*0.18)
+                            ctx.stroke()
+                            // Voyants (LEDs)
+                            ctx.beginPath(); ctx.arc(width*0.30, height*0.36, 1.5, 0, Math.PI*2); ctx.fill()
+                            ctx.beginPath(); ctx.arc(width*0.30, height*0.58, 1.5, 0, Math.PI*2); ctx.fill()
+                        }
                     }
                 }
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 2
                     Text { text: "Configuration Réseau"; color: "white"; font.pixelSize: 15; font.weight: Font.Bold }
-                    Text { text: "Infos et configuration"; color: "#64748b"; font.pixelSize: 10 }
+                    Text { text: "Informations et configuration réseau"; color: "#64748b"; font.pixelSize: 10 }
                 }
             }
             CloseIcon {
@@ -141,34 +161,86 @@ Rectangle {
                         height: 1; color: "#1e293b" }
         }
 
-        // ─── Onglets ────────────────────────────────────────────────────────
+        // ─── Onglets avec icônes ────────────────────────────────────────────
         Row {
             id: tabs
             anchors { top: hdr.bottom; left: parent.left; leftMargin: 6; right: parent.right; rightMargin: 6 }
-            height: 42
+            height: 44
             spacing: 0
 
             Repeater {
                 model: [
-                    {id: "info",     label: "Infos"},
-                    {id: "wifi",     label: "Wi-Fi"},
-                    {id: "ethernet", label: "Ethernet"},
+                    {id: "info",     label: "Infos",    icon: "info"},
+                    {id: "wifi",     label: "Wi-Fi",    icon: "wifi"},
+                    {id: "ethernet", label: "Ethernet", icon: "ethernet"}
                 ]
                 Rectangle {
-                    width: (tabs.width) / 3
+                    width: tabs.width / 3
                     height: tabs.height
                     color: "transparent"
-                    Text {
+
+                    Row {
                         anchors.centerIn: parent
-                        text: modelData.label
-                        color: root.tab === modelData.id ? "#60a5fa" : "#64748b"
-                        font.pixelSize: 12
-                        font.weight: root.tab === modelData.id ? Font.Bold : Font.Medium
+                        spacing: 6
+
+                        // Icône Canvas selon le tab
+                        Canvas {
+                            id: tabIcon
+                            width: 14; height: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                            property color col: root.tab === modelData.id ? "#60a5fa" : "#64748b"
+                            onColChanged: requestPaint()
+                            Component.onCompleted: requestPaint()
+
+                            onPaint: {
+                                var ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                ctx.strokeStyle = col
+                                ctx.fillStyle   = col
+                                ctx.lineWidth   = 1.5
+                                ctx.lineCap     = "round"
+
+                                if (modelData.icon === "info") {
+                                    // Cercle ⓘ
+                                    ctx.beginPath(); ctx.arc(width/2, height/2, width*0.45, 0, Math.PI*2); ctx.stroke()
+                                    ctx.beginPath(); ctx.arc(width/2, height*0.32, 1.2, 0, Math.PI*2); ctx.fill()
+                                    ctx.beginPath(); ctx.moveTo(width/2, height*0.45); ctx.lineTo(width/2, height*0.75); ctx.stroke()
+                                } else if (modelData.icon === "wifi") {
+                                    var wcx = width/2, wcy = height*0.85
+                                    ctx.beginPath(); ctx.arc(wcx, wcy, width*0.45, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                    ctx.beginPath(); ctx.arc(wcx, wcy, width*0.28, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                    ctx.beginPath(); ctx.arc(wcx, wcy, 1.5, 0, Math.PI*2); ctx.fill()
+                                } else if (modelData.icon === "ethernet") {
+                                    ctx.beginPath()
+                                    ctx.moveTo(width*0.20, height*0.30)
+                                    ctx.lineTo(width*0.80, height*0.30)
+                                    ctx.lineTo(width*0.80, height*0.55)
+                                    ctx.lineTo(width*0.68, height*0.75)
+                                    ctx.lineTo(width*0.32, height*0.75)
+                                    ctx.lineTo(width*0.20, height*0.55)
+                                    ctx.closePath()
+                                    ctx.stroke()
+                                    for (var i = 0; i < 3; i++) {
+                                        ctx.fillRect(width*(0.34 + i*0.12), height*0.42, 1, height*0.16)
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.label
+                            color: root.tab === modelData.id ? "#60a5fa" : "#64748b"
+                            font.pixelSize: 12
+                            font.weight: root.tab === modelData.id ? Font.Bold : Font.Medium
+                        }
                     }
+
                     Rectangle {
                         anchors { bottom: parent.bottom; left: parent.left; right: parent.right; leftMargin: 16; rightMargin: 16 }
                         height: 2; radius: 1
                         color: root.tab === modelData.id ? "#3b82f6" : "transparent"
+                        Behavior on color { ColorAnimation { duration: 200 } }
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -187,7 +259,7 @@ Rectangle {
         Rectangle { anchors { top: tabs.bottom; left: parent.left; right: parent.right }
                     height: 1; color: "#1e293b" }
 
-        // ─── Bannières erreur / succès ──────────────────────────────────────
+        // ─── Bannières erreur / succès (avec X pour fermer) ─────────────────
         Column {
             id: banners
             anchors { top: tabs.bottom; left: parent.left; right: parent.right
@@ -252,117 +324,82 @@ Rectangle {
                 spacing: 10
 
                 // Hostname
-                Rectangle {
-                    width: parent.width; height: 54; radius: 12
-                    color: "#1e293b"; border.color: "#334155"
-                    Column {
-                        anchors { fill: parent; leftMargin: 14; topMargin: 9 }
-                        spacing: 2
-                        Text { text: "Hostname"; color: "#64748b"; font.pixelSize: 10; font.letterSpacing: 1 }
-                        Text {
-                            text: root.info.hostname || "—"
-                            color: "white"; font.pixelSize: 14; font.weight: Font.DemiBold
-                        }
-                    }
+                InfoCard {
+                    width: parent.width
+                    iconType: "monitor"; iconColor: "#a78bfa"
+                    label: "Hostname"
+                    value: root.info.hostname || "—"
+                    valueColor: "#c4b5fd"; valueMono: true
                 }
 
-                // Bloc Wi-Fi
-                Rectangle {
-                    width: parent.width
-                    height: wifiInfoCol.implicitHeight + 24
-                    radius: 12; color: "#1e293b"; border.color: "#334155"
-                    Column {
-                        id: wifiInfoCol
-                        anchors { fill: parent; margins: 14 }
-                        spacing: 8
-
-                        Row {
-                            spacing: 10
-                            Rectangle {
-                                width: 28; height: 28; radius: 8
-                                color: "#60a5fa20"
-                                Canvas {
-                                    anchors.centerIn: parent
-                                    width: 20; height: 18
-                                    onPaint: {
-                                        var ctx = getContext("2d")
-                                        ctx.clearRect(0, 0, width, height)
-                                        ctx.strokeStyle = "#60a5fa"
-                                        ctx.fillStyle   = "#60a5fa"
-                                        ctx.lineWidth   = 2
-                                        ctx.lineCap     = "round"
-                                        var cx = width / 2
-                                        var cy = height * 0.92
-                                        // 3 arcs WiFi (du plus grand au plus petit)
-                                        ctx.beginPath(); ctx.arc(cx, cy, width*0.50, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
-                                        ctx.beginPath(); ctx.arc(cx, cy, width*0.32, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
-                                        // Point central plein
-                                        ctx.beginPath(); ctx.arc(cx, cy, 1.8, 0, Math.PI*2); ctx.fill()
-                                    }
-                                }
-                            }
-                            Text { text: "Wi-Fi"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold
-                                   anchors.verticalCenter: parent.verticalCenter }
-                        }
-                        KvRow { k: "Interface"; v: root.info.wifiIface || "—" }
-                        KvRow { k: "SSID";      v: root.info.wifiSsid || "Non connecté" }
-                        KvRow { k: "Adresse IP";v: root.info.wifiIp || "—" }
-                        KvRow { k: "MAC";       v: root.info.wifiMac || "—"; dim: true }
-                        KvRow { k: "Mode";      v: root.info.wifiMode || "—"; dim: true }
-                    }
+                // Section header WI-FI
+                Text {
+                    text: "WI-FI"; color: "#475569"
+                    font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 2
+                    leftPadding: 4; topPadding: 8
                 }
 
-                // Bloc Ethernet
-                Rectangle {
+                // Wi-Fi interface (avec IP en valeur principale + badge IPv4)
+                InfoCard {
                     width: parent.width
-                    height: ethInfoCol.implicitHeight + 24
-                    radius: 12; color: "#1e293b"; border.color: "#334155"
-                    Column {
-                        id: ethInfoCol
-                        anchors { fill: parent; margins: 14 }
-                        spacing: 8
+                    iconType: "wifi"; iconColor: "#60a5fa"
+                    label: root.info.wifiInterface || root.info.wifiIface || "wlan"
+                    value: (root.info.wifiIp && root.info.wifiIp.length > 0)
+                           ? root.info.wifiIp
+                           : "Non disponible"
+                    valueColor: (root.info.wifiIp && root.info.wifiIp.length > 0)
+                                ? "#22c55e" : "#f87171"
+                    valueMono: true
+                    badge: (root.info.wifiIp && root.info.wifiIp.length > 0) ? "IPv4" : ""
+                }
 
-                        Row {
-                            spacing: 10
-                            Rectangle {
-                                width: 28; height: 28; radius: 8
-                                color: "#22c55e20"
-                                Canvas {
-                                    anchors.centerIn: parent
-                                    width: 20; height: 16
-                                    onPaint: {
-                                        var ctx = getContext("2d")
-                                        ctx.clearRect(0, 0, width, height)
-                                        ctx.strokeStyle = "#22c55e"
-                                        ctx.fillStyle   = "#22c55e"
-                                        ctx.lineWidth   = 1.5
-                                        ctx.lineJoin    = "round"
-                                        // Port RJ45 (forme trapézoïdale inversée)
-                                        ctx.beginPath()
-                                        ctx.moveTo(width*0.15, height*0.20)
-                                        ctx.lineTo(width*0.85, height*0.20)
-                                        ctx.lineTo(width*0.85, height*0.65)
-                                        ctx.lineTo(width*0.70, height*0.85)
-                                        ctx.lineTo(width*0.30, height*0.85)
-                                        ctx.lineTo(width*0.15, height*0.65)
-                                        ctx.closePath()
-                                        ctx.stroke()
-                                        // 4 broches verticales
-                                        for (var i = 0; i < 4; i++) {
-                                            var px = width * (0.30 + i * 0.135)
-                                            ctx.fillRect(px, height*0.32, 1.6, height*0.30)
-                                        }
-                                    }
-                                }
-                            }
-                            Text { text: "Ethernet"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold
-                                   anchors.verticalCenter: parent.verticalCenter }
-                        }
-                        KvRow { k: "Interface"; v: root.info.ethIface || "—" }
-                        KvRow { k: "Adresse IP";v: root.info.ethIp || "—" }
-                        KvRow { k: "MAC";       v: root.info.ethMac || "—"; dim: true }
-                        KvRow { k: "Mode";      v: root.info.ethMode || "—"; dim: true }
-                    }
+                // SSID actuel (si connecté)
+                InfoCard {
+                    visible: root.info.wifiSsid && String(root.info.wifiSsid).length > 0
+                    width: parent.width
+                    iconType: "wifi"; iconColor: "#22c55e"
+                    label: "SSID"
+                    value: root.info.wifiSsid || "—"
+                }
+
+                // MAC Wi-Fi
+                InfoCard {
+                    width: parent.width
+                    iconType: "mac"; iconColor: "#94a3b8"
+                    label: "Adresse MAC"
+                    value: root.info.wifiMac || "—"
+                    valueColor: "#cbd5e1"; valueMono: true
+                }
+
+                // Section header ETHERNET
+                Text {
+                    text: "ETHERNET"; color: "#475569"
+                    font.pixelSize: 10; font.weight: Font.Bold; font.letterSpacing: 2
+                    leftPadding: 4; topPadding: 8
+                }
+
+                // Ethernet interface
+                InfoCard {
+                    width: parent.width
+                    iconType: "ethernet"; iconColor: "#22c55e"
+                    label: root.info.ethInterface || root.info.ethIface || "Interface Ethernet"
+                    value: (root.info.ethIp && root.info.ethIp.length > 0)
+                           ? root.info.ethIp
+                           : "Non disponible"
+                    valueColor: (root.info.ethIp && root.info.ethIp.length > 0)
+                                ? "#22c55e" : "#f87171"
+                    valueMono: true
+                    badge: (root.info.ethIp && root.info.ethIp.length > 0) ? "IPv4" : ""
+                }
+
+                // MAC Ethernet (si dispo)
+                InfoCard {
+                    visible: root.info.ethMac && String(root.info.ethMac).length > 0
+                    width: parent.width
+                    iconType: "mac"; iconColor: "#94a3b8"
+                    label: "Adresse MAC"
+                    value: root.info.ethMac || "—"
+                    valueColor: "#cbd5e1"; valueMono: true
                 }
             }
         }
@@ -376,24 +413,40 @@ Rectangle {
                 topMargin: 10; leftMargin: 14; rightMargin: 14; bottomMargin: 10
             }
 
-            // En-tête + bouton Rescan
-            Row {
+            // En-tête + bouton Scanner avec spinner
+            Item {
                 id: wifiHeaderRow
                 anchors { top: parent.top; left: parent.left; right: parent.right }
                 height: 30
+
                 Text {
-                    text: root.busy && root.wifiList.length === 0 ? "Scan…" : "Réseaux détectés"
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    text: "Réseaux disponibles"
                     color: "#cbd5e1"; font.pixelSize: 12; font.weight: Font.DemiBold
-                    anchors.verticalCenter: parent.verticalCenter
                 }
-                Item { width: parent.width - parent.children[0].width - rescanBtn.width - 6; height: 1 }
                 Rectangle {
-                    id: rescanBtn
-                    width: 76; height: 28; radius: 8
-                    color: "#1e293b"; border.color: "#334155"
-                    anchors.verticalCenter: parent.verticalCenter
-                    Text { anchors.centerIn: parent; text: "Rescan"; color: "#cbd5e1"; font.pixelSize: 11 }
+                    id: scanBtn
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    width: 96; height: 28; radius: 8
+                    color: scanMA.pressed ? "#1d4ed8" : "#1e293b"
+                    border.color: "#334155"
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Spinner {
+                            visible: root.busy
+                            anchors.verticalCenter: parent.verticalCenter
+                            size: 12
+                            color: "#cbd5e1"
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.busy ? "Scan…" : "Scanner"
+                            color: "#cbd5e1"; font.pixelSize: 11; font.weight: Font.DemiBold
+                        }
+                    }
                     MouseArea {
+                        id: scanMA
                         anchors.fill: parent
                         enabled: !root.busy
                         onPressed: {
@@ -405,11 +458,11 @@ Rectangle {
                 }
             }
 
-            // ── Liste SSID (hauteur max 5 items ~ 260, au-delà scroll) ──────
+            // Liste WiFi
             Rectangle {
                 id: wifiListBox
                 anchors { top: wifiHeaderRow.bottom; left: parent.left; right: parent.right; topMargin: 8 }
-                height: Math.min(5 * 52, Math.max(1, root.wifiList.length) * 52)
+                height: Math.min(4 * 50 + 8, Math.max(1, root.wifiList.length) * 50 + 8)
                 radius: 10
                 color: "#0b1220"; border.color: "#1e293b"
                 clip: true
@@ -431,65 +484,85 @@ Rectangle {
                     boundsBehavior: Flickable.StopAtBounds
 
                     delegate: Rectangle {
-                        width: wifiListView.width
-                        height: 44; radius: 8
-                        color: root.wifiSelectedSsid === modelData.ssid ? "#1e3a8a" : "#1e293b"
-                        border.color: root.wifiSelectedSsid === modelData.ssid ? "#3b82f6" : "transparent"
+                        property bool isConnected: root.info.wifiSsid === modelData.ssid
+                        property bool isSelected:  root.wifiSelectedSsid === modelData.ssid
 
-                        Row {
+                        width: wifiListView.width
+                        height: 42; radius: 8
+                        color:        isSelected ? "#1e3a8a" : "#1e293b"
+                        border.color: isSelected ? "#3b82f6" : (isConnected ? "#22c55e" : "transparent")
+                        border.width: isSelected ? 1.5 : (isConnected ? 1 : 0)
+
+                        // Icône WiFi avec barres de signal
+                        Canvas {
                             anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                            spacing: 10
-                            // Barres signal
-                            Row {
-                                spacing: 2
-                                anchors.verticalCenter: parent.verticalCenter
-                                Rectangle { width: 3; height: 6;  radius: 1
-                                    color: modelData.signal >= 20 ? "#60a5fa" : "#334155" }
-                                Rectangle { width: 3; height: 10; radius: 1
-                                    color: modelData.signal >= 40 ? "#60a5fa" : "#334155" }
-                                Rectangle { width: 3; height: 14; radius: 1
-                                    color: modelData.signal >= 60 ? "#60a5fa" : "#334155" }
-                                Rectangle { width: 3; height: 18; radius: 1
-                                    color: modelData.signal >= 80 ? "#60a5fa" : "#334155" }
-                            }
-                            // Cadenas si réseau sécurisé
-                            Canvas {
-                                visible: modelData.security && modelData.security.length > 0
-                                width: 12; height: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                onPaint: {
-                                    var ctx = getContext("2d")
-                                    ctx.clearRect(0, 0, width, height)
-                                    ctx.strokeStyle = "#94a3b8"
-                                    ctx.fillStyle   = "#94a3b8"
-                                    ctx.lineWidth   = 1.4
-                                    // Anse du cadenas (arc)
-                                    ctx.beginPath()
-                                    ctx.arc(width/2, height*0.45, width*0.30, Math.PI, 0)
-                                    ctx.stroke()
-                                    // Corps (rectangle arrondi)
-                                    ctx.beginPath()
-                                    ctx.fillRect(width*0.15, height*0.45, width*0.70, height*0.50)
-                                }
-                            }
-                            Column {
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 1
-                                Text { text: modelData.ssid; color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold }
-                                Text {
-                                    text: (modelData.security && modelData.security.length > 0 ? modelData.security : "Ouvert")
-                                        + "  •  " + modelData.signal + "%"
-                                    color: "#64748b"; font.pixelSize: 10
-                                }
+                            width: 20; height: 16
+                            property int sig: modelData.signal || 0
+                            onSigChanged: requestPaint()
+                            Component.onCompleted: requestPaint()
+                            onPaint: {
+                                var ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                ctx.lineCap = "round"
+                                ctx.lineWidth = 2
+                                var cx = width/2, cy = height*0.92
+                                // 3 arcs colorés selon signal
+                                ctx.strokeStyle = sig >= 80 ? "#60a5fa" : "#475569"
+                                ctx.beginPath(); ctx.arc(cx, cy, width*0.45, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                ctx.strokeStyle = sig >= 50 ? "#60a5fa" : "#475569"
+                                ctx.beginPath(); ctx.arc(cx, cy, width*0.30, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                ctx.strokeStyle = sig >= 20 ? "#60a5fa" : "#475569"
+                                ctx.fillStyle   = sig >= 20 ? "#60a5fa" : "#475569"
+                                ctx.beginPath(); ctx.arc(cx, cy, 1.5, 0, Math.PI*2); ctx.fill()
                             }
                         }
 
-                        // Indicateur sélection
-                        Rectangle {
-                            visible: root.wifiSelectedSsid === modelData.ssid
+                        // SSID
+                        Text {
+                            anchors { left: parent.left; leftMargin: 42; verticalCenter: parent.verticalCenter }
+                            text: modelData.ssid
+                            color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold
+                        }
+
+                        // Pill "Connecté" + signal % + badge sécurité (alignés à droite)
+                        Row {
                             anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                            width: 8; height: 8; radius: 4
-                            color: "#3b82f6"
+                            spacing: 6
+
+                            // Pill "Connecté"
+                            Rectangle {
+                                visible: parent.parent.isConnected
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: connText.implicitWidth + 14; height: 18; radius: 9
+                                color: "#16a34a"
+                                Text {
+                                    id: connText
+                                    anchors.centerIn: parent
+                                    text: "Connecté"
+                                    color: "white"; font.pixelSize: 9; font.weight: Font.Bold
+                                }
+                            }
+
+                            // Signal %
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: (modelData.signal || 0) + "%"
+                                color: "#94a3b8"; font.pixelSize: 11
+                            }
+
+                            // Badge sécurité (WPA2/WPA3)
+                            Rectangle {
+                                visible: modelData.security && modelData.security.length > 0
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: secText.implicitWidth + 12; height: 18; radius: 4
+                                color: "#1e293b"; border.color: "#475569"
+                                Text {
+                                    id: secText
+                                    anchors.centerIn: parent
+                                    text: modelData.security || ""
+                                    color: "#cbd5e1"; font.pixelSize: 9; font.weight: Font.DemiBold
+                                }
+                            }
                         }
 
                         MouseArea {
@@ -505,7 +578,7 @@ Rectangle {
                 }
             }
 
-            // ── Formulaire connexion (sous la liste, toujours visible) ──────
+            // Form connexion (apparaît si SSID sélectionné)
             Flickable {
                 anchors { top: wifiListBox.bottom; left: parent.left; right: parent.right; bottom: connectBtn.top
                           topMargin: 12; bottomMargin: 8 }
@@ -516,51 +589,113 @@ Rectangle {
                 Column {
                     id: wifiForm
                     width: parent.width
-                    spacing: 8
-                    opacity: root.wifiSelectedSsid === "" ? 0.5 : 1
+                    spacing: 10
+                    opacity: root.wifiSelectedSsid === "" ? 0.4 : 1
+                    Behavior on opacity { NumberAnimation { duration: 180 } }
 
-                    Row {
-                        spacing: 8
-                        Text {
-                            text: root.wifiSelectedSsid === "" ? "Sélectionnez un réseau" : "Connexion à "
-                            color: "#94a3b8"; font.pixelSize: 11
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Text {
-                            visible: root.wifiSelectedSsid !== ""
-                            text: root.wifiSelectedSsid
-                            color: "white"; font.pixelSize: 12; font.weight: Font.Bold
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-
-                    Text { text: "Mot de passe"; color: "#cbd5e1"; font.pixelSize: 10 }
-                    KbInput {
-                        id: wifiPwInput
+                    // Card SSID sélectionné avec X pour deselect
+                    Column {
                         width: parent.width
-                        keyboard: root.keyboard
-                        isPassword: true
-                        placeholder: "••••••••"
-                        onTextChanged: root.wifiPassword = text
+                        spacing: 4
+                        Text { text: "SSID sélectionné"; color: "#94a3b8"; font.pixelSize: 10 }
+                        Rectangle {
+                            width: parent.width; height: 38; radius: 8
+                            color: "#1e293b"; border.color: "#334155"
+                            Row {
+                                anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                                spacing: 8
+                                Canvas {
+                                    width: 14; height: 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    onPaint: {
+                                        var ctx = getContext("2d")
+                                        ctx.clearRect(0, 0, width, height)
+                                        ctx.strokeStyle = "#60a5fa"; ctx.fillStyle = "#60a5fa"
+                                        ctx.lineWidth = 1.5
+                                        var cx = width/2, cy = height*0.9
+                                        ctx.beginPath(); ctx.arc(cx, cy, width*0.45, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                        ctx.beginPath(); ctx.arc(cx, cy, width*0.28, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                        ctx.beginPath(); ctx.arc(cx, cy, 1.4, 0, Math.PI*2); ctx.fill()
+                                    }
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: root.wifiSelectedSsid !== "" ? root.wifiSelectedSsid : "—"
+                                    color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold
+                                }
+                            }
+                            Rectangle {
+                                visible: root.wifiSelectedSsid !== ""
+                                anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                                width: 22; height: 22; radius: 11
+                                color: deselMA.pressed ? "#334155" : "transparent"
+                                Text { anchors.centerIn: parent; text: "×"; color: "#94a3b8"; font.pixelSize: 14; font.weight: Font.Bold }
+                                MouseArea { id: deselMA; anchors.fill: parent; onPressed: {
+                                        root.wifiSelectedSsid = ""; root.wifiSelectedSecurity = ""; root.wifiPassword = ""
+                                        if (typeof wifiPwInput !== "undefined") wifiPwInput.text = ""
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    Text { text: "Attribution IP"; color: "#cbd5e1"; font.pixelSize: 10 }
+                    // Mot de passe
+                    Column {
+                        width: parent.width; spacing: 4
+                        Text { text: "Mot de passe"; color: "#94a3b8"; font.pixelSize: 10 }
+                        KbInput {
+                            id: wifiPwInput
+                            width: parent.width
+                            keyboard: root.keyboard
+                            isPassword: true
+                            placeholder: "Mot de passe Wi-Fi"
+                            onTextChanged: root.wifiPassword = text
+                        }
+                    }
+
+                    // 2 gros boutons DHCP / IP STATIQUE
                     Row {
-                        spacing: 6
+                        width: parent.width; spacing: 8
                         Repeater {
-                            model: [{id:"dhcp", lbl:"DHCP"}, {id:"static", lbl:"Statique"}]
+                            model: [{id:"dhcp", lbl:"DHCP (AUTO)"}, {id:"static", lbl:"IP STATIQUE"}]
                             Rectangle {
-                                width: 88; height: 30; radius: 8
+                                width: (parent.width - 8) / 2; height: 40; radius: 8
                                 color: root.wifiMode === modelData.id ? "#2563eb" : "#1e293b"
                                 border.color: root.wifiMode === modelData.id ? "#3b82f6" : "#334155"
-                                Text { anchors.centerIn: parent; text: modelData.lbl
-                                       color: root.wifiMode === modelData.id ? "white" : "#94a3b8"
-                                       font.pixelSize: 11; font.weight: Font.DemiBold }
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData.lbl
+                                    color: root.wifiMode === modelData.id ? "white" : "#94a3b8"
+                                    font.pixelSize: 11; font.weight: Font.Bold
+                                }
                                 MouseArea { anchors.fill: parent; onPressed: root.wifiMode = modelData.id }
                             }
                         }
                     }
 
+                    // Helper text Mode actuel (DHCP)
+                    Row {
+                        visible: root.wifiMode === "dhcp"
+                        spacing: 6
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 6; height: 6; radius: 3
+                            color: "#22c55e"
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Mode actuel : "
+                            color: "#94a3b8"; font.pixelSize: 10
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.info.wifiMode || "DHCP (auto)"
+                            color: "white"; font.pixelSize: 10; font.weight: Font.DemiBold
+                        }
+                    }
+
+                    // Champs IP statique (visibles uniquement si IP STATIQUE)
                     Column {
                         visible: root.wifiMode === "static"
                         width: parent.width
@@ -590,13 +725,14 @@ Rectangle {
                 }
             }
 
-            // ── Bouton Connecter (toujours en bas) ──────────────────────────
+            // Bouton Se connecter (full-width, en bas)
             Rectangle {
                 id: connectBtn
                 anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                height: 42; radius: 10
+                height: 46; radius: 10
                 color: (root.wifiSelectedSsid === "" || root.busy) ? "#1e293b" : "#2563eb"
                 opacity: (root.wifiSelectedSsid === "" || root.busy) ? 0.5 : 1
+                Behavior on color { ColorAnimation { duration: 150 } }
 
                 Row {
                     anchors.centerIn: parent
@@ -604,12 +740,11 @@ Rectangle {
                     Spinner {
                         visible: root.busy
                         anchors.verticalCenter: parent.verticalCenter
-                        size: 18
-                        color: "#cbd5e1"
+                        size: 18; color: "#cbd5e1"
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.busy ? "Connexion…" : "Connecter"
+                        text: root.busy ? "Connexion…" : "Se connecter"
                         color: "white"; font.pixelSize: 13; font.weight: Font.Bold
                     }
                 }
@@ -644,23 +779,59 @@ Rectangle {
                 width: parent.width
                 spacing: 10
 
-                Text { text: "Attribution IP"; color: "#cbd5e1"; font.pixelSize: 10 }
+                // Interface (display read-only)
+                Column {
+                    width: parent.width; spacing: 4
+                    Text { text: "Interface"; color: "#94a3b8"; font.pixelSize: 10 }
+                    Rectangle {
+                        width: parent.width; height: 38; radius: 8
+                        color: "#1e293b"; border.color: "#334155"
+                        Text {
+                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                            text: root.info.ethInterface || root.info.ethIface || "ex: eth0, enp3s0"
+                            color: (root.info.ethInterface || root.info.ethIface) ? "white" : "#475569"
+                            font.pixelSize: 12
+                            font.family: "monospace"
+                        }
+                    }
+                }
+
+                // 2 gros boutons DHCP / IP STATIQUE
                 Row {
-                    spacing: 6
+                    width: parent.width; spacing: 8
                     Repeater {
-                        model: [{id:"dhcp", lbl:"DHCP"}, {id:"static", lbl:"Statique"}]
+                        model: [{id:"dhcp", lbl:"DHCP (AUTO)"}, {id:"static", lbl:"IP STATIQUE"}]
                         Rectangle {
-                            width: 100; height: 30; radius: 8
+                            width: (parent.width - 8) / 2; height: 40; radius: 8
                             color: root.ethMode === modelData.id ? "#2563eb" : "#1e293b"
                             border.color: root.ethMode === modelData.id ? "#3b82f6" : "#334155"
-                            Text { anchors.centerIn: parent; text: modelData.lbl
-                                   color: root.ethMode === modelData.id ? "white" : "#94a3b8"
-                                   font.pixelSize: 11; font.weight: Font.DemiBold }
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Text {
+                                anchors.centerIn: parent
+                                text: modelData.lbl
+                                color: root.ethMode === modelData.id ? "white" : "#94a3b8"
+                                font.pixelSize: 11; font.weight: Font.Bold
+                            }
                             MouseArea { anchors.fill: parent; onPressed: root.ethMode = modelData.id }
                         }
                     }
                 }
 
+                // Helper text dans box grise (DHCP)
+                Rectangle {
+                    visible: root.ethMode === "dhcp"
+                    width: parent.width; height: 38; radius: 8
+                    color: "#1e293b"; border.color: "#334155"
+                    Text {
+                        anchors { fill: parent; margins: 10 }
+                        verticalAlignment: Text.AlignVCenter
+                        text: "L'adresse IP sera attribuée automatiquement par le serveur DHCP."
+                        color: "#94a3b8"; font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                // Champs IP statique (visibles uniquement si IP STATIQUE)
                 Column {
                     visible: root.ethMode === "static"
                     width: parent.width
@@ -688,20 +859,21 @@ Rectangle {
                               onTextChanged: root.ethDns = text }
                 }
 
-                Item { width: 1; height: 6 }
+                Item { width: 1; height: 4 }
 
+                // Bouton Appliquer (full-width)
                 Rectangle {
-                    width: parent.width; height: 42; radius: 10
+                    width: parent.width; height: 46; radius: 10
                     color: root.busy ? "#1e293b" : "#2563eb"
                     opacity: root.busy ? 0.5 : 1
+                    Behavior on color { ColorAnimation { duration: 150 } }
                     Row {
                         anchors.centerIn: parent
                         spacing: 8
                         Spinner {
                             visible: root.busy
                             anchors.verticalCenter: parent.verticalCenter
-                            size: 18
-                            color: "#cbd5e1"
+                            size: 18; color: "#cbd5e1"
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
@@ -734,13 +906,13 @@ Rectangle {
                         height: 1; color: "#1e293b" }
 
             Rectangle {
-                anchors.centerIn: parent
-                width: 140; height: 34; radius: 10
-                color: "#1e293b"; border.color: "#475569"
+                anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+                width: 100; height: 34; radius: 10
+                color: closeFooterMA.pressed ? "#0f172a" : "#1e293b"
+                border.color: "#475569"
                 Text { anchors.centerIn: parent; text: "Fermer"; color: "#cbd5e1"; font.pixelSize: 12 }
-                MouseArea { anchors.fill: parent; onPressed: root.close() }
+                MouseArea { id: closeFooterMA; anchors.fill: parent; onPressed: root.close() }
             }
         }
     }
-
 }
