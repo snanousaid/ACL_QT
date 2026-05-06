@@ -49,7 +49,8 @@ HEADERS += \
     framequeue.h \
     cameraworker.h \
     faceworker.h \
-    cameraimgprovider.h
+    cameraimgprovider.h \
+    tapdetector.h
 
 RESOURCES += qml.qrc
 

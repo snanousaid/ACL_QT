@@ -87,19 +87,13 @@ Window {
         rotation: 90
 
         // ── Détecteur de double-tap ──────────────────────────────────────────
-        // Sur A133 eglfs/evdev, seul le MPTA reçoit les touch events natifs.
-        // Sans déclaration touchPoints[], il ne "possède" aucun point → ne bloque
-        // pas les releases des boutons enfants, mais fire onPressed pour le double-tap.
-        MultiPointTouchArea {
-            anchors.fill: parent
-            z: -1
-            onPressed: root._handleTap()
-        }
-        // Fallback mouse (desktop / simulateur)
-        MouseArea {
-            anchors.fill: parent
-            z: -1
-            onPressed: root._handleTap()
+        // Solution C++ : event filter app-level (TapDetector) émet
+        // controller.screenTapped() à chaque MouseButtonPress / TouchBegin
+        // SANS consommer l'événement (propagation normale aux boutons QML).
+        // Évite le bug A133 evdev (MPTA bloque les releases → flood warnings).
+        Connections {
+            target: controller
+            onScreenTapped: root._handleTap()
         }
 
         // ── Header ───────────────────────────────────────────────────────────

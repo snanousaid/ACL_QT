@@ -66,6 +66,10 @@ signals:
     void badgeConnectedChanged();
     void faceConnectedChanged();
     void faceStatusChanged();
+    // Émis quand l'event filter (TapDetector) capture un tap au niveau app.
+    // Permet à QML de détecter le double-tap sans utiliser MultiPointTouchArea
+    // (qui bug sur le driver A133 evdev — releases manquants).
+    void screenTapped();
     void frameReady(const QImage &img);
     void accessEvent(bool granted, const QString &name, const QString &source,
                      double score, const QString &door, const QString &time,

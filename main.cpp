@@ -6,6 +6,7 @@
 #include "appcontroller.h"
 #include "cameraimgprovider.h"
 #include "opencvtest.h"
+#include "tapdetector.h"
 
 int main(int argc, char *argv[])
 {
@@ -25,6 +26,16 @@ int main(int argc, char *argv[])
 
     // ── Backend ───────────────────────────────────────────────────────────────
     AppController *ctrl = new AppController(&app);
+
+    // ── Détecteur de tap global (event filter app-level) ─────────────────────
+    // Contournement bug A133 evdev : MultiPointTouchArea capturait les touches
+    // sans recevoir les releases. On observe ici les MouseButtonPress / TouchBegin
+    // sans les consommer → propagation normale vers QML, mais on émet
+    // controller.screenTapped() pour le détecteur de double-tap.
+    TapDetector *tapDetector = new TapDetector(&app);
+    app.installEventFilter(tapDetector);
+    QObject::connect(tapDetector, &TapDetector::tapped,
+                     ctrl,        &AppController::screenTapped);
 
     // ── Image provider caméra C++ ─────────────────────────────────────────────
     CameraImgProvider *imgProvider = new CameraImgProvider();
