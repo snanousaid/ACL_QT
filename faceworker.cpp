@@ -59,13 +59,6 @@ void FaceWorker::run()
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-static float frameBrightness(const cv::Mat &frame)
-{
-    cv::Mat hsv;
-    cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);
-    return static_cast<float>(cv::mean(hsv)[2]);
-}
-
 // ≥70 % de la surface du visage doit être dans la ROI normalisée.
 static bool faceInRoi(const cv::Mat &face, int fw, int fh,
                       float rx, float ry, float rw, float rh)
