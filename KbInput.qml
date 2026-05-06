@@ -13,6 +13,16 @@ Item {
     property string label:       ""
     property var    keyboard:    null
 
+    // Workaround Qt 5.12 : changer echoMode ne re-masque pas le texte déjà affiché.
+    // On vide puis restaure le texte pour forcer le refresh visuel.
+    onShowPasswordChanged: {
+        if (root.isPassword && !root.showPassword) {
+            var saved = inputField.text
+            inputField.text = ""
+            inputField.text = saved
+        }
+    }
+
     Column {
         id: col
         width: parent.width
