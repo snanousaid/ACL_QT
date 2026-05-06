@@ -287,47 +287,12 @@ Window {
 
                     Item { width: 1; height: 20 }
 
-                    Row {
+                    KbInput {
+                        id: pwInput
                         width: parent.width
-                        spacing: 8
-
-                        KbInput {
-                            id: pwInput
-                            width: parent.width - eyeBtn.width - 8
-                            keyboard:    keyboard
-                            isPassword:  true
-                            placeholder: "••••••••••"
-                        }
-
-                        Rectangle {
-                            id: eyeBtn
-                            width: 70; height: 38; radius: 8
-                            color: eyeMA.pressed ? "#1d4ed8" : (revealed ? "#1e3a8a" : "#1e293b")
-                            border.color: revealed ? "#3b82f6" : "#475569"; border.width: 1.5
-                            anchors.verticalCenter: parent.verticalCenter
-                            property bool revealed: false
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: eyeBtn.revealed ? "Cacher" : "Voir"
-                                color: eyeBtn.revealed ? "#93c5fd" : "#cbd5e1"
-                                font.pixelSize: 12
-                                font.weight:    Font.DemiBold
-                            }
-
-                            property real _lastFireMs: 0
-                            MouseArea {
-                                id: eyeMA
-                                anchors.fill: parent
-                                onPressed: {
-                                    var now = Date.now()
-                                    if (now - eyeBtn._lastFireMs < 250) return
-                                    eyeBtn._lastFireMs = now
-                                    eyeBtn.revealed = !eyeBtn.revealed
-                                    pwInput.showPassword = eyeBtn.revealed
-                                }
-                            }
-                        }
+                        keyboard:    keyboard
+                        isPassword:  true
+                        placeholder: "••••••••••"
                     }
 
                     Item { width: 1; height: 8 }

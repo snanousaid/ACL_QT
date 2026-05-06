@@ -8,20 +8,9 @@ Item {
     property alias text:        inputField.text
     property alias inputItem:   inputField
     property bool   isPassword:   false
-    property bool   showPassword: false   // toggle : true = texte en clair
     property string placeholder: ""
     property string label:       ""
     property var    keyboard:    null
-
-    // Workaround Qt 5.12 : changer echoMode ne re-masque pas le texte déjà affiché.
-    // On vide puis restaure le texte pour forcer le refresh visuel.
-    onShowPasswordChanged: {
-        if (root.isPassword && !root.showPassword) {
-            var saved = inputField.text
-            inputField.text = ""
-            inputField.text = saved
-        }
-    }
 
     Column {
         id: col
@@ -50,9 +39,8 @@ Item {
                 color:       "white"
                 font.pixelSize: 14
                 font.family: "monospace"
-                echoMode: (root.isPassword && !root.showPassword)
-                          ? TextInput.Password : TextInput.Normal
-                inputMethodHints: (root.isPassword && !root.showPassword)
+                echoMode: root.isPassword ? TextInput.Password : TextInput.Normal
+                inputMethodHints: root.isPassword
                                   ? Qt.ImhHiddenText | Qt.ImhNoPredictiveText
                                   : Qt.ImhNone
                 activeFocusOnPress: true
