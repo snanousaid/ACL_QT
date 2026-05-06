@@ -11,5 +11,6 @@
         <file>NetworkConfigModal.qml</file>
         <file>KvRow.qml</file>
         <file>CloseIcon.qml</file>
+        <file>Spinner.qml</file>
     </qresource>
 </RCC>

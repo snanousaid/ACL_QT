@@ -87,18 +87,25 @@ Rectangle {
         }
     }
 
-    MouseArea { anchors.fill: parent; onPressed: root.close() }
+    // Backdrop : absorbe les taps en dehors de la carte → ne ferme pas le modal
+    // sur tap accidentel (sinon perte de saisie). Close uniquement via le X.
+    MouseArea { anchors.fill: parent; onPressed: mouse.accepted = true }
 
     // ── Carte ───────────────────────────────────────────────────────────────
     Rectangle {
+        id: card
         anchors.centerIn: parent
         width:  parent.width  - 24
-        height: parent.height - 40
+        // Hauteur réduite quand le clavier virtuel est ouvert (laisse la place).
+        height: Qt.inputMethod.visible ? Math.min(parent.height - 40,
+                                                   parent.height - Qt.inputMethod.keyboardRectangle.height - 24)
+                                       : parent.height - 40
+        Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
         radius: 20
         color: "#0f172a"
         border.color: "#334155"
 
-        MouseArea { anchors.fill: parent; onPressed: {} }
+        MouseArea { anchors.fill: parent; onPressed: mouse.accepted = true }
 
         // ─── Header ─────────────────────────────────────────────────────────
         Rectangle {
@@ -193,8 +200,17 @@ Rectangle {
                 height: visible ? errLbl.implicitHeight + 14 : 0
                 radius: 8; color: "#7f1d1d33"; border.color: "#7f1d1d"
                 Text { id: errLbl
-                    anchors { fill: parent; margins: 7 }
+                    anchors { left: parent.left; right: errCloseBtn.left; verticalCenter: parent.verticalCenter
+                              leftMargin: 9; rightMargin: 4 }
                     text: root.errorMsg; color: "#fca5a5"; font.pixelSize: 11; wrapMode: Text.WordWrap
+                }
+                Rectangle {
+                    id: errCloseBtn
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 6 }
+                    width: 22; height: 22; radius: 11
+                    color: errCloseMA.pressed ? "#7f1d1d" : "transparent"
+                    Text { anchors.centerIn: parent; text: "×"; color: "#fca5a5"; font.pixelSize: 16; font.weight: Font.Bold }
+                    MouseArea { id: errCloseMA; anchors.fill: parent; onPressed: root.errorMsg = "" }
                 }
             }
             Rectangle {
@@ -203,8 +219,17 @@ Rectangle {
                 height: visible ? okLbl.implicitHeight + 14 : 0
                 radius: 8; color: "#14532d33"; border.color: "#16a34a"
                 Text { id: okLbl
-                    anchors { fill: parent; margins: 7 }
+                    anchors { left: parent.left; right: okCloseBtn.left; verticalCenter: parent.verticalCenter
+                              leftMargin: 9; rightMargin: 4 }
                     text: root.statusMsg; color: "#86efac"; font.pixelSize: 11; wrapMode: Text.WordWrap
+                }
+                Rectangle {
+                    id: okCloseBtn
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 6 }
+                    width: 22; height: 22; radius: 11
+                    color: okCloseMA.pressed ? "#14532d" : "transparent"
+                    Text { anchors.centerIn: parent; text: "×"; color: "#86efac"; font.pixelSize: 16; font.weight: Font.Bold }
+                    MouseArea { id: okCloseMA; anchors.fill: parent; onPressed: root.statusMsg = "" }
                 }
             }
         }
@@ -254,9 +279,27 @@ Rectangle {
                         Row {
                             spacing: 10
                             Rectangle {
-                                width: 24; height: 24; radius: 6
+                                width: 28; height: 28; radius: 8
                                 color: "#60a5fa20"
-                                Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: "#60a5fa" }
+                                Canvas {
+                                    anchors.centerIn: parent
+                                    width: 20; height: 18
+                                    onPaint: {
+                                        var ctx = getContext("2d")
+                                        ctx.clearRect(0, 0, width, height)
+                                        ctx.strokeStyle = "#60a5fa"
+                                        ctx.fillStyle   = "#60a5fa"
+                                        ctx.lineWidth   = 2
+                                        ctx.lineCap     = "round"
+                                        var cx = width / 2
+                                        var cy = height * 0.92
+                                        // 3 arcs WiFi (du plus grand au plus petit)
+                                        ctx.beginPath(); ctx.arc(cx, cy, width*0.50, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                        ctx.beginPath(); ctx.arc(cx, cy, width*0.32, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                        // Point central plein
+                                        ctx.beginPath(); ctx.arc(cx, cy, 1.8, 0, Math.PI*2); ctx.fill()
+                                    }
+                                }
                             }
                             Text { text: "Wi-Fi"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold
                                    anchors.verticalCenter: parent.verticalCenter }
@@ -282,9 +325,35 @@ Rectangle {
                         Row {
                             spacing: 10
                             Rectangle {
-                                width: 24; height: 24; radius: 6
+                                width: 28; height: 28; radius: 8
                                 color: "#22c55e20"
-                                Rectangle { anchors.centerIn: parent; width: 10; height: 6; radius: 1; color: "#22c55e" }
+                                Canvas {
+                                    anchors.centerIn: parent
+                                    width: 20; height: 16
+                                    onPaint: {
+                                        var ctx = getContext("2d")
+                                        ctx.clearRect(0, 0, width, height)
+                                        ctx.strokeStyle = "#22c55e"
+                                        ctx.fillStyle   = "#22c55e"
+                                        ctx.lineWidth   = 1.5
+                                        ctx.lineJoin    = "round"
+                                        // Port RJ45 (forme trapézoïdale inversée)
+                                        ctx.beginPath()
+                                        ctx.moveTo(width*0.15, height*0.20)
+                                        ctx.lineTo(width*0.85, height*0.20)
+                                        ctx.lineTo(width*0.85, height*0.65)
+                                        ctx.lineTo(width*0.70, height*0.85)
+                                        ctx.lineTo(width*0.30, height*0.85)
+                                        ctx.lineTo(width*0.15, height*0.65)
+                                        ctx.closePath()
+                                        ctx.stroke()
+                                        // 4 broches verticales
+                                        for (var i = 0; i < 4; i++) {
+                                            var px = width * (0.30 + i * 0.135)
+                                            ctx.fillRect(px, height*0.32, 1.6, height*0.30)
+                                        }
+                                    }
+                                }
                             }
                             Text { text: "Ethernet"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold
                                    anchors.verticalCenter: parent.verticalCenter }
@@ -382,6 +451,26 @@ Rectangle {
                                     color: modelData.signal >= 60 ? "#60a5fa" : "#334155" }
                                 Rectangle { width: 3; height: 18; radius: 1
                                     color: modelData.signal >= 80 ? "#60a5fa" : "#334155" }
+                            }
+                            // Cadenas si réseau sécurisé
+                            Canvas {
+                                visible: modelData.security && modelData.security.length > 0
+                                width: 12; height: 14
+                                anchors.verticalCenter: parent.verticalCenter
+                                onPaint: {
+                                    var ctx = getContext("2d")
+                                    ctx.clearRect(0, 0, width, height)
+                                    ctx.strokeStyle = "#94a3b8"
+                                    ctx.fillStyle   = "#94a3b8"
+                                    ctx.lineWidth   = 1.4
+                                    // Anse du cadenas (arc)
+                                    ctx.beginPath()
+                                    ctx.arc(width/2, height*0.45, width*0.30, Math.PI, 0)
+                                    ctx.stroke()
+                                    // Corps (rectangle arrondi)
+                                    ctx.beginPath()
+                                    ctx.fillRect(width*0.15, height*0.45, width*0.70, height*0.50)
+                                }
                             }
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter
@@ -508,10 +597,21 @@ Rectangle {
                 height: 42; radius: 10
                 color: (root.wifiSelectedSsid === "" || root.busy) ? "#1e293b" : "#2563eb"
                 opacity: (root.wifiSelectedSsid === "" || root.busy) ? 0.5 : 1
-                Text {
+
+                Row {
                     anchors.centerIn: parent
-                    text: root.busy ? "Connexion…" : "Connecter"
-                    color: "white"; font.pixelSize: 13; font.weight: Font.Bold
+                    spacing: 8
+                    Spinner {
+                        visible: root.busy
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: 18
+                        color: "#cbd5e1"
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.busy ? "Connexion…" : "Connecter"
+                        color: "white"; font.pixelSize: 13; font.weight: Font.Bold
+                    }
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -594,10 +694,20 @@ Rectangle {
                     width: parent.width; height: 42; radius: 10
                     color: root.busy ? "#1e293b" : "#2563eb"
                     opacity: root.busy ? 0.5 : 1
-                    Text {
+                    Row {
                         anchors.centerIn: parent
-                        text: root.busy ? "Application…" : "Appliquer"
-                        color: "white"; font.pixelSize: 13; font.weight: Font.Bold
+                        spacing: 8
+                        Spinner {
+                            visible: root.busy
+                            anchors.verticalCenter: parent.verticalCenter
+                            size: 18
+                            color: "#cbd5e1"
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.busy ? "Application…" : "Appliquer"
+                            color: "white"; font.pixelSize: 13; font.weight: Font.Bold
+                        }
                     }
                     MouseArea {
                         anchors.fill: parent
