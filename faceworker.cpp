@@ -78,11 +78,57 @@ static bool faceInRoi(const cv::Mat &face, int fw, int fh,
     return (interArea / faceArea) >= 0.70f;
 }
 
+// Validation géométrique d'un visage YuNet — filtre faux positifs (mains, etc.).
+// Vérifie : aspect ratio, yeux au-dessus de la bouche, yeux horizontaux,
+// écart inter-yeux cohérent, nez positionné entre yeux et bouche.
+// face : 1×15 (x,y,w,h, rex,rey, lex,ley, nx,ny, rmx,rmy, lmx,lmy, score)
+static bool isValidFace(const cv::Mat &face)
+{
+    float w = face.at<float>(0, 2);
+    float h = face.at<float>(0, 3);
+    if (w <= 0 || h <= 0) return false;
+
+    // (1) Aspect ratio W/H : visage entre 0.6 et 1.3 (mains très elongees rejetees)
+    float ratio = w / h;
+    if (ratio < 0.6f || ratio > 1.3f) return false;
+
+    float rex = face.at<float>(0, 4),  rey = face.at<float>(0, 5);
+    float lex = face.at<float>(0, 6),  ley = face.at<float>(0, 7);
+    float nx  = face.at<float>(0, 8),  ny  = face.at<float>(0, 9);
+    float rmy = face.at<float>(0, 11), lmy = face.at<float>(0, 13);
+
+    float eye_cx   = (rex + lex) / 2.0f;
+    float eye_cy   = (rey + ley) / 2.0f;
+    float mouth_cy = (rmy + lmy) / 2.0f;
+
+    // (2) Yeux au-dessus de la bouche
+    if (eye_cy >= mouth_cy) return false;
+
+    // (3) Yeux à peu près horizontaux : |Δy| < 30% de l'écart inter-yeux
+    float eye_dx = std::abs(lex - rex);
+    if (eye_dx < 1e-3f) return false;
+    if (std::abs(ley - rey) / eye_dx > 0.30f) return false;
+
+    // (4) Écart inter-yeux entre 25 % et 60 % de la largeur du visage
+    float eye_ratio = eye_dx / w;
+    if (eye_ratio < 0.25f || eye_ratio > 0.60f) return false;
+
+    // (5) Nez verticalement entre les yeux et la bouche (tolérance 5 % de h)
+    if (ny < eye_cy - 0.05f * h || ny > mouth_cy + 0.05f * h) return false;
+
+    // (6) Nez horizontalement entre les yeux (tolérance 40 % de l'écart inter-yeux)
+    if (std::abs(nx - eye_cx) > 0.40f * eye_dx) return false;
+
+    return true;
+}
+
+// Renvoie l'index du plus grand visage VALIDE, ou -1 si aucun.
 static int bestFaceIdx(const cv::Mat &faces)
 {
-    int   idx  = 0;
+    int   idx  = -1;
     float best = 0;
     for (int i = 0; i < faces.rows; i++) {
+        if (!isValidFace(faces.row(i))) continue;
         float area = faces.at<float>(i, 2) * faces.at<float>(i, 3);
         if (area > best) { best = area; idx = i; }
     }
@@ -409,14 +455,16 @@ void FaceWorker::run()
                     faces.at<float>(i, j) *= invScale;
         }
 
-        bool hasFace = (!faces.empty() && faces.rows > 0);
+        // Sélection du meilleur visage VALIDE (filtre faux positifs : mains, etc.)
+        int  bestIdx = (!faces.empty() && faces.rows > 0) ? bestFaceIdx(faces) : -1;
+        bool hasFace = (bestIdx >= 0);
         bool inRoi   = false;
         bool matched = false;
 
         if (hasFace) lastFaceMs = nowMs;
 
         if (hasFace) {
-            cv::Mat best = faces.row(bestFaceIdx(faces));
+            cv::Mat best = faces.row(bestIdx);
             inRoi = faceInRoi(best, frame.cols, frame.rows,
                               ROI_X, ROI_Y, ROI_W, ROI_H);
 
