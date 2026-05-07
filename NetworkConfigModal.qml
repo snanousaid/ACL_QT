@@ -420,16 +420,59 @@ Rectangle {
                 topMargin: 10; leftMargin: 14; rightMargin: 14; bottomMargin: 10
             }
 
-            // ── Tout le contenu (header + liste + form) dans un Flickable ────
-            // Permet de scroll quand le clavier ouvre ou si la liste WiFi est
-            // longue. Le bouton "Se connecter" reste fixe en bas hors Flickable.
+            // ── Header HORS Flickable (sinon Flickable A133 evdev intercepte
+            //    parfois les taps sur le bouton Scanner comme drag) ────────────
+            Item {
+                id: wifiHeaderRow
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: 30
+
+                Text {
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    text: "Réseaux disponibles"
+                    color: "#cbd5e1"; font.pixelSize: 12; font.weight: Font.DemiBold
+                }
+                AppButton {
+                    id: scanBtn
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    width: 96; height: 28
+                    variant: "secondary"
+                    enabled: !root.busy
+                    text: root.busy ? "Scan…" : "Scanner"
+                    fontSize: 11; bold: false
+                    onClicked: {
+                        console.log("[scanBtn] clicked → scanWifi()")
+                        root.errorMsg = ""; root.statusMsg = ""
+                        root.busy = true
+                        root.controller.scanWifi()
+                    }
+                    contentItem: Row {
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Spinner {
+                            visible: root.busy
+                            anchors.verticalCenter: parent.verticalCenter
+                            size: 12
+                            color: "#cbd5e1"
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: scanBtn.text
+                            color: "#cbd5e1"; font.pixelSize: 11; font.weight: Font.DemiBold
+                        }
+                    }
+                }
+            }
+
+            // ── Flickable : liste + form (header est en dehors) ──────────────
             Flickable {
                 id: wifiFlick
-                anchors { top: parent.top; left: parent.left; right: parent.right; bottom: connectBtn.top
-                          bottomMargin: 8 }
+                anchors { top: wifiHeaderRow.bottom; left: parent.left; right: parent.right; bottom: connectBtn.top
+                          topMargin: 8; bottomMargin: 8 }
                 contentHeight: wifiContent.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
+                pressDelay: 0   // pas de delay → AppButton recoit le press immediatement
 
                 // Scroll auto sur le champ qui prend le focus (clavier visible)
                 function scrollTo(item) {
@@ -460,46 +503,6 @@ Rectangle {
                     width: parent.width
                     spacing: 10
 
-                    // En-tête + bouton Scanner
-                    Item {
-                        width: parent.width
-                        height: 30
-
-                        Text {
-                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                            text: "Réseaux disponibles"
-                            color: "#cbd5e1"; font.pixelSize: 12; font.weight: Font.DemiBold
-                        }
-                        AppButton {
-                            id: scanBtn
-                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                            width: 96; height: 28
-                            variant: "secondary"
-                            enabled: !root.busy
-                            text: root.busy ? "Scan…" : "Scanner"
-                            fontSize: 11; bold: false
-                            onClicked: {
-                                root.errorMsg = ""; root.statusMsg = ""
-                                root.busy = true
-                                root.controller.scanWifi()
-                            }
-                            contentItem: Row {
-                                anchors.centerIn: parent
-                                spacing: 6
-                                Spinner {
-                                    visible: root.busy
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    size: 12
-                                    color: "#cbd5e1"
-                                }
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: scanBtn.text
-                                    color: "#cbd5e1"; font.pixelSize: 11; font.weight: Font.DemiBold
-                                }
-                            }
-                        }
-                    }
 
                     // ── Liste WiFi : taille adaptive ─────────────────────────
                     // Compacte (108px ≈ 2 items) quand SSID sélectionné pour
