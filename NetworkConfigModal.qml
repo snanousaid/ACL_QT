@@ -420,311 +420,368 @@ Rectangle {
                 topMargin: 10; leftMargin: 14; rightMargin: 14; bottomMargin: 10
             }
 
-            // En-tête + bouton Scanner avec spinner
-            Item {
-                id: wifiHeaderRow
-                anchors { top: parent.top; left: parent.left; right: parent.right }
-                height: 30
-
-                Text {
-                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                    text: "Réseaux disponibles"
-                    color: "#cbd5e1"; font.pixelSize: 12; font.weight: Font.DemiBold
-                }
-                AppButton {
-                    id: scanBtn
-                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                    width: 96; height: 28
-                    variant: "secondary"
-                    enabled: !root.busy
-                    text: root.busy ? "Scan…" : "Scanner"
-                    fontSize: 11; bold: false
-                    onClicked: {
-                        root.errorMsg = ""; root.statusMsg = ""
-                        root.busy = true
-                        root.controller.scanWifi()
-                    }
-                    contentItem: Row {
-                        anchors.centerIn: parent
-                        spacing: 6
-                        Spinner {
-                            visible: root.busy
-                            anchors.verticalCenter: parent.verticalCenter
-                            size: 12
-                            color: "#cbd5e1"
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: scanBtn.text
-                            color: "#cbd5e1"; font.pixelSize: 11; font.weight: Font.DemiBold
-                        }
-                    }
-                }
-            }
-
-            // Liste WiFi
-            Rectangle {
-                id: wifiListBox
-                anchors { top: wifiHeaderRow.bottom; left: parent.left; right: parent.right; topMargin: 8 }
-                height: Math.min(4 * 50 + 8, Math.max(1, root.wifiList.length) * 50 + 8)
-                radius: 10
-                color: "#0b1220"; border.color: "#1e293b"
-                clip: true
-
-                Text {
-                    anchors.centerIn: parent
-                    visible: root.wifiList.length === 0 && !root.busy
-                    text: "Aucun réseau"
-                    color: "#64748b"; font.pixelSize: 11
-                }
-
-                ListView {
-                    id: wifiListView
-                    anchors.fill: parent
-                    anchors.margins: 4
-                    model: root.wifiList
-                    spacing: 4
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-
-                    delegate: Rectangle {
-                        property bool isConnected: root.info.wifiSsid === modelData.ssid
-                        property bool isSelected:  root.wifiSelectedSsid === modelData.ssid
-
-                        width: wifiListView.width
-                        height: 42; radius: 8
-                        color:        isSelected ? "#1e3a8a" : "#1e293b"
-                        border.color: isSelected ? "#3b82f6" : (isConnected ? "#22c55e" : "transparent")
-                        border.width: isSelected ? 1.5 : (isConnected ? 1 : 0)
-
-                        // Icône WiFi avec barres de signal
-                        Canvas {
-                            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                            width: 20; height: 16
-                            property int sig: modelData.signal || 0
-                            onSigChanged: requestPaint()
-                            Component.onCompleted: requestPaint()
-                            onPaint: {
-                                var ctx = getContext("2d")
-                                ctx.clearRect(0, 0, width, height)
-                                ctx.lineCap = "round"
-                                ctx.lineWidth = 2
-                                var cx = width/2, cy = height*0.92
-                                // 3 arcs colorés selon signal
-                                ctx.strokeStyle = sig >= 80 ? "#60a5fa" : "#475569"
-                                ctx.beginPath(); ctx.arc(cx, cy, width*0.45, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
-                                ctx.strokeStyle = sig >= 50 ? "#60a5fa" : "#475569"
-                                ctx.beginPath(); ctx.arc(cx, cy, width*0.30, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
-                                ctx.strokeStyle = sig >= 20 ? "#60a5fa" : "#475569"
-                                ctx.fillStyle   = sig >= 20 ? "#60a5fa" : "#475569"
-                                ctx.beginPath(); ctx.arc(cx, cy, 1.5, 0, Math.PI*2); ctx.fill()
-                            }
-                        }
-
-                        // SSID
-                        Text {
-                            anchors { left: parent.left; leftMargin: 42; verticalCenter: parent.verticalCenter }
-                            text: modelData.ssid
-                            color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold
-                        }
-
-                        // Pill "Connecté" + signal % + badge sécurité (alignés à droite)
-                        Row {
-                            anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                            spacing: 6
-
-                            // Pill "Connecté"
-                            Rectangle {
-                                visible: parent.parent.isConnected
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: connText.implicitWidth + 14; height: 18; radius: 9
-                                color: "#16a34a"
-                                Text {
-                                    id: connText
-                                    anchors.centerIn: parent
-                                    text: "Connecté"
-                                    color: "white"; font.pixelSize: 9; font.weight: Font.Bold
-                                }
-                            }
-
-                            // Signal %
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: (modelData.signal || 0) + "%"
-                                color: "#94a3b8"; font.pixelSize: 11
-                            }
-
-                            // Badge sécurité (WPA2/WPA3)
-                            Rectangle {
-                                visible: !!modelData.security && modelData.security.length > 0
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: secText.implicitWidth + 12; height: 18; radius: 4
-                                color: "#1e293b"; border.color: "#475569"
-                                Text {
-                                    id: secText
-                                    anchors.centerIn: parent
-                                    text: modelData.security || ""
-                                    color: "#cbd5e1"; font.pixelSize: 9; font.weight: Font.DemiBold
-                                }
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: {
-                                root.wifiSelectedSsid = modelData.ssid
-                                root.wifiSelectedSecurity = modelData.security || ""
-                                root.wifiPassword = ""
-                                if (typeof wifiPwInput !== "undefined") wifiPwInput.text = ""
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Form connexion (apparaît si SSID sélectionné)
+            // ── Tout le contenu (header + liste + form) dans un Flickable ────
+            // Permet de scroll quand le clavier ouvre ou si la liste WiFi est
+            // longue. Le bouton "Se connecter" reste fixe en bas hors Flickable.
             Flickable {
-                anchors { top: wifiListBox.bottom; left: parent.left; right: parent.right; bottom: connectBtn.top
-                          topMargin: 12; bottomMargin: 8 }
-                contentHeight: wifiForm.implicitHeight
+                id: wifiFlick
+                anchors { top: parent.top; left: parent.left; right: parent.right; bottom: connectBtn.top
+                          bottomMargin: 8 }
+                contentHeight: wifiContent.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
 
+                // ScrollBar visible pour indiquer le scroll
+                Rectangle {
+                    visible: wifiFlick.contentHeight > wifiFlick.height
+                    anchors { right: parent.right; rightMargin: 2; top: parent.top; bottom: parent.bottom }
+                    width: 3; radius: 1.5
+                    color: "#1e293b"
+                    Rectangle {
+                        width: parent.width
+                        radius: parent.radius
+                        color: "#475569"
+                        y: wifiFlick.contentY * (parent.height / wifiFlick.contentHeight)
+                        height: wifiFlick.height * (parent.height / wifiFlick.contentHeight)
+                    }
+                }
+
                 Column {
-                    id: wifiForm
+                    id: wifiContent
                     width: parent.width
                     spacing: 10
-                    opacity: root.wifiSelectedSsid === "" ? 0.4 : 1
-                    Behavior on opacity { NumberAnimation { duration: 180 } }
 
-                    // Card SSID sélectionné avec X pour deselect
-                    Column {
+                    // En-tête + bouton Scanner
+                    Item {
                         width: parent.width
-                        spacing: 4
-                        Text { text: "SSID sélectionné"; color: "#94a3b8"; font.pixelSize: 10 }
-                        Rectangle {
-                            width: parent.width; height: 38; radius: 8
-                            color: "#1e293b"; border.color: "#334155"
-                            Row {
-                                anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                                spacing: 8
-                                Canvas {
-                                    width: 14; height: 12
+                        height: 30
+
+                        Text {
+                            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                            text: "Réseaux disponibles"
+                            color: "#cbd5e1"; font.pixelSize: 12; font.weight: Font.DemiBold
+                        }
+                        AppButton {
+                            id: scanBtn
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                            width: 96; height: 28
+                            variant: "secondary"
+                            enabled: !root.busy
+                            text: root.busy ? "Scan…" : "Scanner"
+                            fontSize: 11; bold: false
+                            onClicked: {
+                                root.errorMsg = ""; root.statusMsg = ""
+                                root.busy = true
+                                root.controller.scanWifi()
+                            }
+                            contentItem: Row {
+                                anchors.centerIn: parent
+                                spacing: 6
+                                Spinner {
+                                    visible: root.busy
                                     anchors.verticalCenter: parent.verticalCenter
-                                    onPaint: {
-                                        var ctx = getContext("2d")
-                                        ctx.clearRect(0, 0, width, height)
-                                        ctx.strokeStyle = "#60a5fa"; ctx.fillStyle = "#60a5fa"
-                                        ctx.lineWidth = 1.5
-                                        var cx = width/2, cy = height*0.9
-                                        ctx.beginPath(); ctx.arc(cx, cy, width*0.45, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
-                                        ctx.beginPath(); ctx.arc(cx, cy, width*0.28, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
-                                        ctx.beginPath(); ctx.arc(cx, cy, 1.4, 0, Math.PI*2); ctx.fill()
-                                    }
+                                    size: 12
+                                    color: "#cbd5e1"
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: root.wifiSelectedSsid !== "" ? root.wifiSelectedSsid : "—"
-                                    color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold
+                                    text: scanBtn.text
+                                    color: "#cbd5e1"; font.pixelSize: 11; font.weight: Font.DemiBold
                                 }
                             }
+                        }
+                    }
+
+                    // ── Liste WiFi : taille adaptive ─────────────────────────
+                    // Compacte (108px ≈ 2 items) quand SSID sélectionné pour
+                    // laisser place au form. Sinon montre jusqu'à 4 items.
+                    Rectangle {
+                        id: wifiListBox
+                        width: parent.width
+                        height: root.wifiSelectedSsid !== ""
+                                ? Math.min(108, Math.max(1, root.wifiList.length) * 50 + 8)
+                                : Math.min(4 * 50 + 8, Math.max(1, root.wifiList.length) * 50 + 8)
+                        Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                        radius: 10
+                        color: "#0b1220"; border.color: "#1e293b"
+                        clip: true
+
+                        Text {
+                            anchors.centerIn: parent
+                            visible: root.wifiList.length === 0 && !root.busy
+                            text: "Aucun réseau"
+                            color: "#64748b"; font.pixelSize: 11
+                        }
+
+                        ListView {
+                            id: wifiListView
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            model: root.wifiList
+                            spacing: 4
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+                            // Centre auto sur le SSID sélectionné quand la liste rétrécit
+                            currentIndex: {
+                                for (var i = 0; i < root.wifiList.length; i++)
+                                    if (root.wifiList[i].ssid === root.wifiSelectedSsid) return i
+                                return -1
+                            }
+                            onCurrentIndexChanged: if (currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Center)
+
+                            delegate: AppButton {
+                                id: wifiBtn
+                                property bool isConnected: root.info.wifiSsid === modelData.ssid
+                                property bool isSelected:  root.wifiSelectedSsid === modelData.ssid
+                                width: wifiListView.width
+                                height: 42
+                                text: ""
+
+                                background: Rectangle {
+                                    radius: 8
+                                    color: wifiBtn.pressed ? "#0f1c47"
+                                                            : (wifiBtn.isSelected ? "#1e3a8a" : "#1e293b")
+                                    border.color: wifiBtn.isSelected ? "#3b82f6"
+                                                                     : (wifiBtn.isConnected ? "#22c55e" : "transparent")
+                                    border.width: wifiBtn.isSelected ? 1.5 : (wifiBtn.isConnected ? 1 : 0)
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                }
+
+                                contentItem: Item {
+                                    // Icône WiFi + SSID + pill/signal/sécurité
+                                    Canvas {
+                                        anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
+                                        width: 20; height: 16
+                                        property int sig: modelData.signal || 0
+                                        onSigChanged: requestPaint()
+                                        Component.onCompleted: requestPaint()
+                                        onPaint: {
+                                            var ctx = getContext("2d")
+                                            ctx.clearRect(0, 0, width, height)
+                                            ctx.lineCap = "round"; ctx.lineWidth = 2
+                                            var cx = width/2, cy = height*0.92
+                                            ctx.strokeStyle = sig >= 80 ? "#60a5fa" : "#475569"
+                                            ctx.beginPath(); ctx.arc(cx, cy, width*0.45, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                            ctx.strokeStyle = sig >= 50 ? "#60a5fa" : "#475569"
+                                            ctx.beginPath(); ctx.arc(cx, cy, width*0.30, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                            ctx.strokeStyle = sig >= 20 ? "#60a5fa" : "#475569"
+                                            ctx.fillStyle   = sig >= 20 ? "#60a5fa" : "#475569"
+                                            ctx.beginPath(); ctx.arc(cx, cy, 1.5, 0, Math.PI*2); ctx.fill()
+                                        }
+                                    }
+                                    Text {
+                                        anchors { left: parent.left; leftMargin: 38; verticalCenter: parent.verticalCenter }
+                                        text: modelData.ssid
+                                        color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold
+                                        elide: Text.ElideRight
+                                        width: parent.width - 38 - rightInfo.width - 8
+                                    }
+                                    Row {
+                                        id: rightInfo
+                                        anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+                                        spacing: 6
+                                        Rectangle {
+                                            visible: wifiBtn.isConnected
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: connText.implicitWidth + 12; height: 18; radius: 9
+                                            color: "#16a34a"
+                                            Text {
+                                                id: connText
+                                                anchors.centerIn: parent
+                                                text: "Connecté"
+                                                color: "white"; font.pixelSize: 9; font.weight: Font.Bold
+                                            }
+                                        }
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: (modelData.signal || 0) + "%"
+                                            color: "#94a3b8"; font.pixelSize: 11
+                                        }
+                                        Rectangle {
+                                            visible: !!modelData.security && modelData.security.length > 0
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: secText.implicitWidth + 10; height: 18; radius: 4
+                                            color: "#0f172a"; border.color: "#475569"; border.width: 1
+                                            Text {
+                                                id: secText
+                                                anchors.centerIn: parent
+                                                text: modelData.security || ""
+                                                color: "#cbd5e1"; font.pixelSize: 9; font.weight: Font.DemiBold
+                                            }
+                                        }
+                                    }
+                                }
+
+                                onClicked: {
+                                    root.wifiSelectedSsid = modelData.ssid
+                                    root.wifiSelectedSecurity = modelData.security || ""
+                                    root.wifiPassword = ""
+                                    if (typeof wifiPwInput !== "undefined") wifiPwInput.text = ""
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Form connexion (toujours présent, opacity selon select) ──
+                    Column {
+                        id: wifiForm
+                        width: parent.width
+                        spacing: 10
+                        opacity: root.wifiSelectedSsid === "" ? 0.4 : 1
+                        Behavior on opacity { NumberAnimation { duration: 180 } }
+
+                        // Card SSID sélectionné avec X pour deselect
+                        Column {
+                            width: parent.width
+                            spacing: 4
+                            Text { text: "SSID sélectionné"; color: "#94a3b8"; font.pixelSize: 10 }
                             Rectangle {
-                                visible: root.wifiSelectedSsid !== ""
-                                anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                                width: 22; height: 22; radius: 11
-                                color: deselMA.pressed ? "#334155" : "transparent"
-                                Text { anchors.centerIn: parent; text: "×"; color: "#94a3b8"; font.pixelSize: 14; font.weight: Font.Bold }
-                                MouseArea { id: deselMA; anchors.fill: parent; onClicked: {
+                                width: parent.width; height: 38; radius: 8
+                                color: "#1e293b"; border.color: "#334155"
+                                Row {
+                                    anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                                    spacing: 8
+                                    Canvas {
+                                        width: 14; height: 12
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        onPaint: {
+                                            var ctx = getContext("2d")
+                                            ctx.clearRect(0, 0, width, height)
+                                            ctx.strokeStyle = "#60a5fa"; ctx.fillStyle = "#60a5fa"
+                                            ctx.lineWidth = 1.5
+                                            var cx = width/2, cy = height*0.9
+                                            ctx.beginPath(); ctx.arc(cx, cy, width*0.45, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                            ctx.beginPath(); ctx.arc(cx, cy, width*0.28, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                            ctx.beginPath(); ctx.arc(cx, cy, 1.4, 0, Math.PI*2); ctx.fill()
+                                        }
+                                    }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: root.wifiSelectedSsid !== "" ? root.wifiSelectedSsid : "—"
+                                        color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold
+                                    }
+                                }
+                                AppButton {
+                                    id: deselBtn
+                                    visible: root.wifiSelectedSsid !== ""
+                                    anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+                                    width: 24; height: 24
+                                    text: "×"
+                                    background: Rectangle {
+                                        radius: 12
+                                        color: deselBtn.pressed ? "#334155" : "transparent"
+                                    }
+                                    contentItem: Text {
+                                        text: deselBtn.text; color: "#94a3b8"
+                                        font.pixelSize: 14; font.weight: Font.Bold
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    onClicked: {
                                         root.wifiSelectedSsid = ""; root.wifiSelectedSecurity = ""; root.wifiPassword = ""
                                         if (typeof wifiPwInput !== "undefined") wifiPwInput.text = ""
                                     }
                                 }
                             }
                         }
-                    }
 
-                    // Mot de passe
-                    Column {
-                        width: parent.width; spacing: 4
-                        Text { text: "Mot de passe"; color: "#94a3b8"; font.pixelSize: 10 }
-                        KbInput {
-                            id: wifiPwInput
-                            width: parent.width
-                            keyboard: root.keyboard
-                            isPassword: true
-                            placeholder: "Mot de passe Wi-Fi"
-                            onTextChanged: root.wifiPassword = text
-                        }
-                    }
-
-                    // 2 gros boutons DHCP / IP STATIQUE
-                    Row {
-                        width: parent.width; spacing: 8
-                        Repeater {
-                            model: [{id:"dhcp", lbl:"DHCP (AUTO)"}, {id:"static", lbl:"IP STATIQUE"}]
-                            Rectangle {
-                                width: (parent.width - 8) / 2; height: 40; radius: 8
-                                color: root.wifiMode === modelData.id ? "#2563eb" : "#1e293b"
-                                border.color: root.wifiMode === modelData.id ? "#3b82f6" : "#334155"
-                                Behavior on color { ColorAnimation { duration: 150 } }
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: modelData.lbl
-                                    color: root.wifiMode === modelData.id ? "white" : "#94a3b8"
-                                    font.pixelSize: 11; font.weight: Font.Bold
-                                }
-                                MouseArea { anchors.fill: parent; onClicked: root.wifiMode = modelData.id }
+                        // Mot de passe
+                        Column {
+                            width: parent.width; spacing: 4
+                            Text { text: "Mot de passe"; color: "#94a3b8"; font.pixelSize: 10 }
+                            KbInput {
+                                id: wifiPwInput
+                                width: parent.width
+                                keyboard: root.keyboard
+                                isPassword: true
+                                placeholder: "Mot de passe Wi-Fi"
+                                onTextChanged: root.wifiPassword = text
+                                onActiveFocusChanged: if (activeFocus) Qt.callLater(function() {
+                                    wifiFlick.contentY = Math.min(
+                                        Math.max(0, wifiContent.implicitHeight - wifiFlick.height),
+                                        wifiPwInput.y + wifiPwInput.height / 2)
+                                })
                             }
                         }
-                    }
 
-                    // Helper text Mode actuel (DHCP)
-                    Row {
-                        visible: root.wifiMode === "dhcp"
-                        spacing: 6
-                        Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 6; height: 6; radius: 3
-                            color: "#22c55e"
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "Mode actuel : "
-                            color: "#94a3b8"; font.pixelSize: 10
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: root.info.wifiMode || "DHCP (auto)"
-                            color: "white"; font.pixelSize: 10; font.weight: Font.DemiBold
-                        }
-                    }
-
-                    // Champs IP statique (visibles uniquement si IP STATIQUE)
-                    Column {
-                        visible: root.wifiMode === "static"
-                        width: parent.width
-                        spacing: 6
+                        // 2 gros boutons DHCP / IP STATIQUE
                         Row {
-                            width: parent.width; spacing: 6
-                            Column {
-                                width: (parent.width - 6) / 2; spacing: 3
-                                Text { text: "IP"; color: "#94a3b8"; font.pixelSize: 10 }
-                                KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.50"
-                                          onTextChanged: root.wifiIp = text }
-                            }
-                            Column {
-                                width: (parent.width - 6) / 2; spacing: 3
-                                Text { text: "Préfixe"; color: "#94a3b8"; font.pixelSize: 10 }
-                                KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "24"
-                                          onTextChanged: root.wifiPrefix = text }
+                            width: parent.width; spacing: 8
+                            Repeater {
+                                model: [{id:"dhcp", lbl:"DHCP (AUTO)"}, {id:"static", lbl:"IP STATIQUE"}]
+                                AppButton {
+                                    id: modeBtn
+                                    width: (parent.width - 8) / 2; height: 40
+                                    text: modelData.lbl
+                                    fontSize: 11
+                                    background: Rectangle {
+                                        radius: 8
+                                        color: root.wifiMode === modelData.id ? "#2563eb"
+                                                : (modeBtn.pressed ? "#0f172a" : "#1e293b")
+                                        border.color: root.wifiMode === modelData.id ? "#3b82f6" : "#334155"
+                                        border.width: 1
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                    }
+                                    contentItem: Text {
+                                        text: modelData.lbl
+                                        color: root.wifiMode === modelData.id ? "white" : "#94a3b8"
+                                        font.pixelSize: 11; font.weight: Font.Bold
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    onClicked: root.wifiMode = modelData.id
+                                }
                             }
                         }
-                        Text { text: "Gateway"; color: "#94a3b8"; font.pixelSize: 10 }
-                        KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.1"
-                                  onTextChanged: root.wifiGw = text }
-                        Text { text: "DNS"; color: "#94a3b8"; font.pixelSize: 10 }
-                        KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "8.8.8.8"
-                                  onTextChanged: root.wifiDns = text }
+
+                        // Helper text Mode actuel (DHCP)
+                        Row {
+                            visible: root.wifiMode === "dhcp"
+                            spacing: 6
+                            Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 6; height: 6; radius: 3
+                                color: "#22c55e"
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Mode actuel : "
+                                color: "#94a3b8"; font.pixelSize: 10
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.info.wifiMode || "DHCP (auto)"
+                                color: "white"; font.pixelSize: 10; font.weight: Font.DemiBold
+                            }
+                        }
+
+                        // Champs IP statique (visibles uniquement si IP STATIQUE)
+                        Column {
+                            visible: root.wifiMode === "static"
+                            width: parent.width
+                            spacing: 6
+                            Row {
+                                width: parent.width; spacing: 6
+                                Column {
+                                    width: (parent.width - 6) / 2; spacing: 3
+                                    Text { text: "IP"; color: "#94a3b8"; font.pixelSize: 10 }
+                                    KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.50"
+                                              onTextChanged: root.wifiIp = text }
+                                }
+                                Column {
+                                    width: (parent.width - 6) / 2; spacing: 3
+                                    Text { text: "Préfixe"; color: "#94a3b8"; font.pixelSize: 10 }
+                                    KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "24"
+                                              onTextChanged: root.wifiPrefix = text }
+                                }
+                            }
+                            Text { text: "Gateway"; color: "#94a3b8"; font.pixelSize: 10 }
+                            KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.1"
+                                      onTextChanged: root.wifiGw = text }
+                            Text { text: "DNS"; color: "#94a3b8"; font.pixelSize: 10 }
+                            KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "8.8.8.8"
+                                      onTextChanged: root.wifiDns = text }
+                        }
                     }
                 }
             }
