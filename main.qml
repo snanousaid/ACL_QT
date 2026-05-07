@@ -180,14 +180,14 @@ Window {
         }
 
         // ── Bouton Settings flottant (apparaît temporairement après tap-tap) ──
-        Rectangle {
+        // Wrapper Item : pour permettre au halo (z:-1) d'etre derriere le bouton
+        // sans interferer avec AppButton.background.
+        Item {
             id: settingsBtn
             visible: false
             z: 30
-            width: 56; height: 56; radius: 28
+            width: 56; height: 56
             anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 18 }
-            color: settingsMA.pressed ? "#1d4ed8" : "#2563eb"
-            border.color: "#60a5fa"; border.width: 2
 
             // Pulse halo derrière le bouton (purement visuel, pas d'interaction)
             Rectangle {
@@ -206,36 +206,40 @@ Window {
                 }
             }
 
-            // Engrenage en Canvas
-            Canvas {
-                anchors.centerIn: parent
-                width: 26; height: 26
-                onPaint: {
-                    var ctx = getContext("2d")
-                    ctx.clearRect(0, 0, width, height)
-                    ctx.strokeStyle = "white"
-                    ctx.fillStyle   = "white"
-                    ctx.lineWidth   = 1.6
-                    ctx.lineJoin    = "round"
-                    var cx = 13, cy = 13, r = 9, rIn = 4.5, n = 8
-                    ctx.beginPath()
-                    for (var i = 0; i < n * 2; i++) {
-                        var a   = (Math.PI * 2 * i) / (n * 2) - Math.PI / 2
-                        var rad = (i % 2 === 0) ? r : r - 2.2
-                        var x   = cx + rad * Math.cos(a)
-                        var y   = cy + rad * Math.sin(a)
-                        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
-                    }
-                    ctx.closePath()
-                    ctx.stroke()
-                    ctx.beginPath(); ctx.arc(cx, cy, rIn, 0, Math.PI * 2); ctx.stroke()
-                    ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill()
-                }
-            }
-
-            MouseArea {
-                id: settingsMA
+            // AppButton avec engrenage en contentItem
+            AppButton {
+                id: settingsBtnAct
                 anchors.fill: parent
+                text: ""
+                background: Rectangle {
+                    radius: 28
+                    color: settingsBtnAct.pressed ? "#1d4ed8" : "#2563eb"
+                    border.color: "#60a5fa"; border.width: 2
+                }
+                contentItem: Canvas {
+                    width: 26; height: 26
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        ctx.strokeStyle = "white"
+                        ctx.fillStyle   = "white"
+                        ctx.lineWidth   = 1.6
+                        ctx.lineJoin    = "round"
+                        var cx = 13, cy = 13, r = 9, rIn = 4.5, n = 8
+                        ctx.beginPath()
+                        for (var i = 0; i < n * 2; i++) {
+                            var a   = (Math.PI * 2 * i) / (n * 2) - Math.PI / 2
+                            var rad = (i % 2 === 0) ? r : r - 2.2
+                            var x   = cx + rad * Math.cos(a)
+                            var y   = cy + rad * Math.sin(a)
+                            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+                        }
+                        ctx.closePath()
+                        ctx.stroke()
+                        ctx.beginPath(); ctx.arc(cx, cy, rIn, 0, Math.PI * 2); ctx.stroke()
+                        ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill()
+                    }
+                }
                 onClicked: {
                     passwordModal.visible = true
                     root.adminVisible = true
