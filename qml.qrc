@@ -14,5 +14,6 @@
         <file>Spinner.qml</file>
         <file>InfoCard.qml</file>
         <file>TouchTest.qml</file>
+        <file>AppButton.qml</file>
     </qresource>
 </RCC>

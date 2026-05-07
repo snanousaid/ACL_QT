@@ -12,13 +12,10 @@ Rectangle {
     signal closed()
 
     function open()  { visible = true  }
-    function close() {
-        // Defer (A133 evdev : cacher MouseArea dans onPressed perd le release).
-        Qt.callLater(function() { visible = false; closed() })
-    }
+    function close() { visible = false; closed() }
 
-    // Backdrop
-    MouseArea { anchors.fill: parent; onPressed: root.close() }
+    // Backdrop tap = close (onClicked → release deja livre, safe)
+    MouseArea { anchors.fill: parent; onClicked: root.close() }
 
     // ── Card ─────────────────────────────────────────────────────────────────
     Rectangle {
@@ -28,7 +25,7 @@ Rectangle {
         color: "#0f172a"
         border.color: "#334155"
 
-        MouseArea { anchors.fill: parent; onPressed: {} }  // absorb backdrop tap
+        MouseArea { anchors.fill: parent; onClicked: {} }  // absorb backdrop tap
 
         Column {
             id: card
@@ -38,7 +35,6 @@ Rectangle {
             }
             spacing: 0
 
-            // Title
             Text {
                 text: "Configuration"
                 color: "white"; font.pixelSize: 18; font.weight: Font.Bold
@@ -55,18 +51,16 @@ Rectangle {
                 width: parent.width
                 spacing: 12
 
-                // Réseau button
-                Rectangle {
+                // Réseau button — AppButton variant secondary avec contenu custom
+                AppButton {
                     width: (parent.width - 12) / 2
-                    height: btnNetCol.implicitHeight + 40
-                    radius: 12; color: "#1e293b"; border.color: "#334155"
+                    height: 110
+                    variant: "secondary"
+                    text: ""   // contenu custom via contentItem
+                    onClicked: { root.visible = false; root.openNetwork() }
 
-                    Column {
-                        id: btnNetCol
-                        anchors.centerIn: parent
+                    contentItem: Column {
                         spacing: 8
-
-                        // Wi-Fi icon (Canvas arcs)
                         Canvas {
                             width: 32; height: 32
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -76,14 +70,10 @@ Rectangle {
                                 ctx.strokeStyle = "#60a5fa"
                                 ctx.lineWidth   = 2.5
                                 ctx.lineCap     = "round"
-                                // dot
                                 ctx.fillStyle = "#60a5fa"
                                 ctx.beginPath(); ctx.arc(16,26,2.5,0,Math.PI*2); ctx.fill()
-                                // arc 1
                                 ctx.beginPath(); ctx.arc(16,26,6,Math.PI*1.2,Math.PI*1.8,false); ctx.stroke()
-                                // arc 2
                                 ctx.beginPath(); ctx.arc(16,26,12,Math.PI*1.2,Math.PI*1.8,false); ctx.stroke()
-                                // arc 3
                                 ctx.beginPath(); ctx.arc(16,26,18,Math.PI*1.2,Math.PI*1.8,false); ctx.stroke()
                             }
                         }
@@ -98,27 +88,18 @@ Rectangle {
                             anchors.horizontalCenter: parent.horizontalCenter
                         }
                     }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onPressed: Qt.callLater(function() {
-                            root.visible = false; root.openNetwork()
-                        })
-                    }
                 }
 
                 // Face ID button
-                Rectangle {
+                AppButton {
                     width: (parent.width - 12) / 2
-                    height: btnFaceCol.implicitHeight + 40
-                    radius: 12; color: "#1e293b"; border.color: "#334155"
+                    height: 110
+                    variant: "secondary"
+                    text: ""
+                    onClicked: { root.visible = false; root.openFace() }
 
-                    Column {
-                        id: btnFaceCol
-                        anchors.centerIn: parent
+                    contentItem: Column {
                         spacing: 8
-
-                        // Face-scan icon (Canvas)
                         Canvas {
                             width: 32; height: 32
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -129,18 +110,14 @@ Rectangle {
                                 ctx.lineWidth   = 2
                                 ctx.lineCap     = "round"
                                 var arm = 6
-                                // corner brackets
                                 ctx.beginPath(); ctx.moveTo(4,4+arm); ctx.lineTo(4,4); ctx.lineTo(4+arm,4); ctx.stroke()
                                 ctx.beginPath(); ctx.moveTo(28-arm,4); ctx.lineTo(28,4); ctx.lineTo(28,4+arm); ctx.stroke()
                                 ctx.beginPath(); ctx.moveTo(4,28-arm); ctx.lineTo(4,28); ctx.lineTo(4+arm,28); ctx.stroke()
                                 ctx.beginPath(); ctx.moveTo(28-arm,28); ctx.lineTo(28,28); ctx.lineTo(28,28-arm); ctx.stroke()
-                                // face oval
                                 ctx.beginPath(); ctx.ellipse(10,9,12,14); ctx.stroke()
-                                // eyes
                                 ctx.fillStyle = "#22d3ee"
                                 ctx.beginPath(); ctx.arc(13,15,1.2,0,Math.PI*2); ctx.fill()
                                 ctx.beginPath(); ctx.arc(19,15,1.2,0,Math.PI*2); ctx.fill()
-                                // mouth arc
                                 ctx.beginPath(); ctx.arc(16,18,3,0,Math.PI,false); ctx.stroke()
                             }
                         }
@@ -155,24 +132,19 @@ Rectangle {
                             anchors.horizontalCenter: parent.horizontalCenter
                         }
                     }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onPressed: Qt.callLater(function() {
-                            root.visible = false; root.openFace()
-                        })
-                    }
                 }
             }
 
             Item { width: 1; height: 12 }
 
             // Close button
-            Rectangle {
-                width: parent.width; height: 40
-                radius: 10; color: "#1e293b"
-                Text { anchors.centerIn: parent; text: "Fermer"; color: "#cbd5e1"; font.pixelSize: 14; font.weight: Font.Medium }
-                MouseArea { anchors.fill: parent; onPressed: root.close() }
+            AppButton {
+                width: parent.width
+                height: 40
+                variant: "secondary"
+                text: "Fermer"
+                fontSize: 14; bold: false
+                onClicked: root.close()
             }
 
             Item { width: 1; height: 4 }
