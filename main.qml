@@ -263,7 +263,7 @@ Window {
                 border.color: "#334155"
 
                 // Carte : absorbe explicitement les clics non gérés
-                MouseArea { anchors.fill: parent; onClicked: {}; z: -1 }
+                MouseArea { anchors.fill: parent; z: -1; onClicked: {} }
 
                 Column {
                     id: pwCol
