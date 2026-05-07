@@ -21,12 +21,9 @@ Rectangle {
         if (controller) controller.listFaceUsers()
     }
     function close() {
-        // Defer (A133 evdev : cacher MouseArea dans onPressed perd le release).
-        Qt.callLater(function() {
-            visible = false
-            confirmDelete.visible = false
-            closed()
-        })
+        visible = false
+        confirmDelete.visible = false
+        closed()
     }
 
     Connections {
@@ -168,37 +165,49 @@ Rectangle {
                     anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
                     spacing: 8
 
-                    Rectangle {
-                        width: 64; height: 32; radius: 8
-                        color: modelData.active ? "#0f3a26" : "#1e293b"
-                        border.color: modelData.active ? "#22c55e" : "#475569"
-                        Text {
-                            anchors.centerIn: parent
-                            text: modelData.active ? "Actif" : "Off"
+                    AppButton {
+                        width: 64; height: 32
+                        enabled: root.busyName === ""
+                        text: modelData.active ? "Actif" : "Off"
+                        fontSize: 10
+                        background: Rectangle {
+                            radius: 8
+                            color: modelData.active ? "#0f3a26" : "#1e293b"
+                            border.color: modelData.active ? "#22c55e" : "#475569"
+                            border.width: 1
+                            opacity: parent.enabled ? 1 : 0.5
+                        }
+                        contentItem: Text {
+                            text: parent.text
                             color: modelData.active ? "#86efac" : "#94a3b8"
                             font.pixelSize: 10; font.weight: Font.DemiBold
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                         }
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled: root.busyName === ""
-                            onPressed: {
-                                root.busyName = modelData.name
-                                root.controller.toggleFaceUser(modelData.name)
-                            }
+                        onClicked: {
+                            root.busyName = modelData.name
+                            root.controller.toggleFaceUser(modelData.name)
                         }
                     }
 
-                    Rectangle {
-                        width: 36; height: 32; radius: 8
-                        color: "#7f1d1d33"; border.color: "#7f1d1d"
-                        Text { anchors.centerIn: parent; text: "🗑"; font.pixelSize: 13 }
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled: root.busyName === ""
-                            onPressed: {
-                                confirmDelete.targetName = modelData.name
-                                confirmDelete.visible = true
-                            }
+                    AppButton {
+                        width: 36; height: 32
+                        enabled: root.busyName === ""
+                        text: "🗑"
+                        background: Rectangle {
+                            radius: 8
+                            color: "#7f1d1d33"; border.color: "#7f1d1d"; border.width: 1
+                            opacity: parent.enabled ? 1 : 0.5
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            confirmDelete.targetName = modelData.name
+                            confirmDelete.visible = true
                         }
                     }
                 }
@@ -221,28 +230,28 @@ Rectangle {
                 anchors.centerIn: parent
                 spacing: 8
 
-                Rectangle {
-                    width: 110; height: 36; radius: 8
-                    color: "#16a34a"; border.color: "#22c55e"
-                    Text { anchors.centerIn: parent; text: "+ Nouveau"; color: "white"; font.pixelSize: 12; font.weight: Font.Bold }
-                    MouseArea { anchors.fill: parent; onPressed: root.openEnroll() }
+                AppButton {
+                    width: 110; height: 36
+                    variant: "success"
+                    text: "+ Nouveau"
+                    fontSize: 12
+                    onClicked: root.openEnroll()
                 }
 
-                Rectangle {
-                    width: 100; height: 36; radius: 8
-                    color: "#1e293b"; border.color: "#334155"
-                    Text { anchors.centerIn: parent; text: "Rafraîchir"; color: "#cbd5e1"; font.pixelSize: 12 }
-                    MouseArea {
-                        anchors.fill: parent
-                        onPressed: { root.errorMsg = ""; root.controller.listFaceUsers() }
-                    }
+                AppButton {
+                    width: 100; height: 36
+                    variant: "secondary"
+                    text: "Rafraîchir"
+                    fontSize: 12; bold: false
+                    onClicked: { root.errorMsg = ""; root.controller.listFaceUsers() }
                 }
 
-                Rectangle {
-                    width: 90; height: 36; radius: 8
-                    color: "#1e293b"; border.color: "#475569"
-                    Text { anchors.centerIn: parent; text: "Fermer"; color: "#94a3b8"; font.pixelSize: 12 }
-                    MouseArea { anchors.fill: parent; onPressed: root.close() }
+                AppButton {
+                    width: 90; height: 36
+                    variant: "secondary"
+                    text: "Fermer"
+                    fontSize: 12; bold: false
+                    onClicked: root.close()
                 }
             }
         }
@@ -257,14 +266,14 @@ Rectangle {
         z: 60
         property string targetName: ""
 
-        MouseArea { anchors.fill: parent; onPressed: confirmDelete.visible = false }
+        MouseArea { anchors.fill: parent; onClicked: confirmDelete.visible = false }
 
         Rectangle {
             anchors.centerIn: parent
             width: 300; height: confirmCol.implicitHeight + 40
             radius: 14; color: "#0f172a"; border.color: "#7f1d1d"
 
-            MouseArea { anchors.fill: parent; onPressed: {} }
+            MouseArea { anchors.fill: parent; onClicked: {} }
 
             Column {
                 id: confirmCol
@@ -280,23 +289,20 @@ Rectangle {
 
                 Row {
                     width: parent.width; spacing: 8
-                    Rectangle {
-                        width: (parent.width - 8) / 2; height: 36; radius: 8
-                        color: "#1e293b"
-                        Text { anchors.centerIn: parent; text: "Annuler"; color: "#94a3b8"; font.pixelSize: 12 }
-                        MouseArea { anchors.fill: parent; onPressed: confirmDelete.visible = false }
+                    AppButton {
+                        width: (parent.width - 8) / 2; height: 36
+                        variant: "secondary"
+                        text: "Annuler"; fontSize: 12; bold: false
+                        onClicked: confirmDelete.visible = false
                     }
-                    Rectangle {
-                        width: (parent.width - 8) / 2; height: 36; radius: 8
-                        color: "#7f1d1d"
-                        Text { anchors.centerIn: parent; text: "Supprimer"; color: "white"; font.pixelSize: 12; font.weight: Font.Bold }
-                        MouseArea {
-                            anchors.fill: parent
-                            onPressed: {
-                                confirmDelete.visible = false
-                                root.busyName = confirmDelete.targetName
-                                root.controller.deleteFaceUser(confirmDelete.targetName)
-                            }
+                    AppButton {
+                        width: (parent.width - 8) / 2; height: 36
+                        variant: "danger"
+                        text: "Supprimer"; fontSize: 12
+                        onClicked: {
+                            confirmDelete.visible = false
+                            root.busyName = confirmDelete.targetName
+                            root.controller.deleteFaceUser(confirmDelete.targetName)
                         }
                     }
                 }

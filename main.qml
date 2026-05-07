@@ -236,16 +236,10 @@ Window {
             MouseArea {
                 id: settingsMA
                 anchors.fill: parent
-                onPressed: {
-                    // Pas de settingsBtn.visible=false ici (cacherait cette
-                    // MouseArea avant le release → ghost touch + warning).
-                    // Le modal (z:40) couvre le bouton (z:30), settingsHideTimer
-                    // le masquera apres 6s.
-                    Qt.callLater(function() {
-                        passwordModal.visible = true
-                        root.adminVisible = true
-                        controller.pauseRecognition()
-                    })
+                onClicked: {
+                    passwordModal.visible = true
+                    root.adminVisible = true
+                    controller.pauseRecognition()
                 }
             }
         }
@@ -259,7 +253,7 @@ Window {
             z: 40
 
             // Backdrop : absorbe les clics → ne ferme pas le modal sur tap arrière-plan
-            MouseArea { anchors.fill: parent; onPressed: mouse.accepted = true }
+            MouseArea { anchors.fill: parent; onClicked: {} }
 
             Rectangle {
                 anchors.centerIn: parent
@@ -269,7 +263,7 @@ Window {
                 border.color: "#334155"
 
                 // Carte : absorbe explicitement les clics non gérés
-                MouseArea { anchors.fill: parent; onPressed: mouse.accepted = true; z: -1 }
+                MouseArea { anchors.fill: parent; onClicked: {}; z: -1 }
 
                 Column {
                     id: pwCol
@@ -318,32 +312,24 @@ Window {
                         width: parent.width
                         spacing: 8
 
-                        Rectangle {
+                        AppButton {
                             width: (parent.width - 8) / 2; height: 40
-                            radius: 10; color: "#1e293b"
-                            Text { anchors.centerIn: parent; text: "Annuler"; color: "#94a3b8"; font.pixelSize: 13 }
-                            MouseArea {
-                                anchors.fill: parent
-                                onPressed: {
-                                    Qt.callLater(function() {
-                                        passwordModal.visible = false
-                                        pwInput.text = ""; keyboard.close()
-                                        pwError.visible = false
-                                        root.adminVisible = false
-                                        controller.resumeRecognition()
-                                    })
-                                }
+                            variant: "secondary"
+                            text: "Annuler"
+                            onClicked: {
+                                passwordModal.visible = false
+                                pwInput.text = ""; keyboard.close()
+                                pwError.visible = false
+                                root.adminVisible = false
+                                controller.resumeRecognition()
                             }
                         }
 
-                        Rectangle {
+                        AppButton {
                             width: (parent.width - 8) / 2; height: 40
-                            radius: 10; color: "#2563eb"
-                            Text { anchors.centerIn: parent; text: "Valider"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold }
-                            MouseArea {
-                                anchors.fill: parent
-                                onPressed: passwordModal.checkPassword()
-                            }
+                            variant: "primary"
+                            text: "Valider"
+                            onClicked: passwordModal.checkPassword()
                         }
                     }
 
@@ -353,31 +339,13 @@ Window {
 
             function checkPassword() {
                 if (pwInput.text === "2899100*-+") {
-                    // Defer le close → release du tap "Valider" est livré avant
-                    // de cacher le modal (sinon ghost touch + warning).
-                    Qt.callLater(function() {
-                        keyboard.close()
-                        passwordModal.visible = false
-                        pwInput.text = ""
-                        pwError.visible = false
-                        adminMenu.open()
-                    })
+                    keyboard.close()
+                    passwordModal.visible = false
+                    pwInput.text = ""
+                    pwError.visible = false
+                    adminMenu.open()
                 } else {
                     pwError.visible = true
-                }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                z: -1
-                onPressed: {
-                    Qt.callLater(function() {
-                        passwordModal.visible = false
-                        pwInput.text = ""; keyboard.close()
-                        pwError.visible = false
-                        root.adminVisible = false
-                        controller.resumeRecognition()
-                    })
                 }
             }
         }
