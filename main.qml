@@ -180,71 +180,69 @@ Window {
         }
 
         // ── Bouton Settings flottant (apparaît temporairement après tap-tap) ──
-        // Wrapper Item : pour permettre au halo (z:-1) d'etre derriere le bouton
-        // sans interferer avec AppButton.background.
-        Item {
+        AppButton {
             id: settingsBtn
             visible: false
             z: 30
             width: 56; height: 56
             anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 18 }
+            text: ""
 
-            // Pulse halo derrière le bouton (purement visuel, pas d'interaction)
-            Rectangle {
-                z: -1
-                anchors.centerIn: parent
-                width:  parent.width  + 16
-                height: parent.height + 16
-                radius: width / 2
-                color: "transparent"
-                border.color: "#3b82f6"; border.width: 1
-                opacity: 0.5
-                SequentialAnimation on opacity {
-                    loops: Animation.Infinite; running: settingsBtn.visible
-                    NumberAnimation { from: 0.5; to: 0.0; duration: 1200; easing.type: Easing.OutQuad }
-                    PauseAnimation  { duration: 100 }
+            background: Item {
+                // Pulse halo derrière le bouton (déborde du fond)
+                Rectangle {
+                    anchors.centerIn: parent
+                    width:  parent.width  + 16
+                    height: parent.height + 16
+                    radius: width / 2
+                    color: "transparent"
+                    border.color: "#3b82f6"; border.width: 1
+                    opacity: 0.5
+                    SequentialAnimation on opacity {
+                        loops: Animation.Infinite; running: settingsBtn.visible
+                        NumberAnimation { from: 0.5; to: 0.0; duration: 1200; easing.type: Easing.OutQuad }
+                        PauseAnimation  { duration: 100 }
+                    }
+                }
+                // Fond du bouton (cercle bleu)
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 28
+                    color: settingsBtn.pressed ? "#1d4ed8" : "#2563eb"
+                    border.color: "#60a5fa"; border.width: 2
                 }
             }
 
-            // AppButton avec engrenage en contentItem
-            AppButton {
-                id: settingsBtnAct
-                anchors.fill: parent
-                text: ""
-                background: Rectangle {
-                    radius: 28
-                    color: settingsBtnAct.pressed ? "#1d4ed8" : "#2563eb"
-                    border.color: "#60a5fa"; border.width: 2
-                }
-                contentItem: Canvas {
-                    width: 26; height: 26
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.clearRect(0, 0, width, height)
-                        ctx.strokeStyle = "white"
-                        ctx.fillStyle   = "white"
-                        ctx.lineWidth   = 1.6
-                        ctx.lineJoin    = "round"
-                        var cx = 13, cy = 13, r = 9, rIn = 4.5, n = 8
-                        ctx.beginPath()
-                        for (var i = 0; i < n * 2; i++) {
-                            var a   = (Math.PI * 2 * i) / (n * 2) - Math.PI / 2
-                            var rad = (i % 2 === 0) ? r : r - 2.2
-                            var x   = cx + rad * Math.cos(a)
-                            var y   = cy + rad * Math.sin(a)
-                            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
-                        }
-                        ctx.closePath()
-                        ctx.stroke()
-                        ctx.beginPath(); ctx.arc(cx, cy, rIn, 0, Math.PI * 2); ctx.stroke()
-                        ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill()
+            contentItem: Canvas {
+                width: 26; height: 26
+                onPaint: {
+                    var ctx = getContext("2d")
+                    ctx.clearRect(0, 0, width, height)
+                    ctx.strokeStyle = "white"
+                    ctx.fillStyle   = "white"
+                    ctx.lineWidth   = 1.6
+                    ctx.lineJoin    = "round"
+                    var cx = 13, cy = 13, r = 9, rIn = 4.5, n = 8
+                    ctx.beginPath()
+                    for (var i = 0; i < n * 2; i++) {
+                        var a   = (Math.PI * 2 * i) / (n * 2) - Math.PI / 2
+                        var rad = (i % 2 === 0) ? r : r - 2.2
+                        var x   = cx + rad * Math.cos(a)
+                        var y   = cy + rad * Math.sin(a)
+                        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
                     }
+                    ctx.closePath()
+                    ctx.stroke()
+                    ctx.beginPath(); ctx.arc(cx, cy, rIn, 0, Math.PI * 2); ctx.stroke()
+                    ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill()
                 }
-                onClicked: {
-                    passwordModal.visible = true
-                    root.adminVisible = true
-                    controller.pauseRecognition()
-                }
+            }
+
+            onClicked: {
+                console.log("[settingsBtn] clicked → ouvre passwordModal")
+                passwordModal.visible = true
+                root.adminVisible = true
+                controller.pauseRecognition()
             }
         }
 
