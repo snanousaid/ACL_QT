@@ -505,13 +505,14 @@ Rectangle {
 
 
                     // ── Liste WiFi : taille adaptive ─────────────────────────
-                    // Compacte (108px ≈ 2 items) quand SSID sélectionné pour
-                    // laisser place au form. Sinon montre jusqu'à 4 items.
+                    // Tres compacte (56px = 1 item) quand SSID selectionne :
+                    // affiche seulement le SSID choisi, libere place pour le form.
+                    // Sinon : jusqu'a 4 items visibles.
                     Rectangle {
                         id: wifiListBox
                         width: parent.width
                         height: root.wifiSelectedSsid !== ""
-                                ? Math.min(108, Math.max(1, root.wifiList.length) * 50 + 8)
+                                ? 56
                                 : Math.min(4 * 50 + 8, Math.max(1, root.wifiList.length) * 50 + 8)
                         Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                         radius: 10
@@ -560,6 +561,16 @@ Rectangle {
                                 return -1
                             }
                             onCurrentIndexChanged: if (currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Center)
+
+                            // Auto-focus du champ password quand un SSID est selectionne
+                            // -> clavier s'ouvre + auto-scroll vers le champ
+                            Connections {
+                                target: root
+                                onWifiSelectedSsidChanged: {
+                                    if (root.wifiSelectedSsid !== "" && typeof wifiPwInput !== "undefined")
+                                        Qt.callLater(function() { wifiPwInput.inputItem.forceActiveFocus() })
+                                }
+                            }
 
                             delegate: AppButton {
                                 id: wifiBtn
