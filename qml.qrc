@@ -13,5 +13,6 @@
         <file>CloseIcon.qml</file>
         <file>Spinner.qml</file>
         <file>InfoCard.qml</file>
+        <file>TouchTest.qml</file>
     </qresource>
 </RCC>
