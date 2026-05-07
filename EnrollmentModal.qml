@@ -20,16 +20,6 @@ Rectangle {
     property string userRole: "user"
     property int    samplesPerPose: 10
 
-    // Debounce global pour les boutons tactiles (driver A133 : presses
-    // dupliqués sans release entre les deux).
-    property real _lastFireMs: 0
-    function _debounce() {
-        var now = Date.now()
-        if (now - _lastFireMs < 250) return false
-        _lastFireMs = now
-        return true
-    }
-
     // Statut backend (rempli par poll)
     property var status: ({})
 
@@ -59,14 +49,11 @@ Rectangle {
         if (typeof nameInput !== "undefined") nameInput.text = ""
     }
     function close() {
-        // Defer la fermeture (cf. NetworkConfigModal.close) — A133 evdev.
-        Qt.callLater(function() {
-            if (state === "live") controller.cancelEnroll()
-            pollTimer.stop()
-            visible = false
-            if (keyboard) keyboard.close()
-            closed()
-        })
+        if (state === "live") controller.cancelEnroll()
+        pollTimer.stop()
+        visible = false
+        if (keyboard) keyboard.close()
+        closed()
     }
 
     Connections {
@@ -106,7 +93,7 @@ Rectangle {
         onTriggered: if (root.controller) root.controller.pollEnrollStatus()
     }
 
-    MouseArea { anchors.fill: parent; onPressed: {} }   // bloque les clics derrière
+    MouseArea { anchors.fill: parent; onClicked: {} }   // bloque les clics derrière
 
     // ── Carte ───────────────────────────────────────────────────────────────
     Rectangle {
@@ -246,25 +233,26 @@ Rectangle {
                     spacing: 8
                     Repeater {
                         model: ["user", "admin"]
-                        Rectangle {
-                            id: roleBtn
+                        AppButton {
                             property bool selected: root.userRole === modelData
-                            width: 100; height: 36; radius: 8
-                            color: selected ? "#2563eb" : (roleMA.pressed ? "#0f172a" : "#1e293b")
-                            border.color: selected ? "#3b82f6" : "#334155"
-                            Text {
-                                anchors.centerIn: parent; text: modelData
-                                color: roleBtn.selected ? "white" : "#94a3b8"
+                            width: 100; height: 36
+                            text: modelData
+                            fontSize: 12
+                            background: Rectangle {
+                                radius: 8
+                                color: parent.selected ? "#2563eb" : (parent.pressed ? "#0f172a" : "#1e293b")
+                                border.color: parent.selected ? "#3b82f6" : "#334155"
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                color: parent.selected ? "white" : "#94a3b8"
                                 font.pixelSize: 12; font.weight: Font.DemiBold
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
                             }
-                            MouseArea {
-                                id: roleMA
-                                anchors.fill: parent
-                                onPressed: {
-                                    if (!root._debounce()) return
-                                    root.userRole = modelData
-                                }
-                            }
+                            onClicked: root.userRole = modelData
                         }
                     }
                 }
@@ -276,20 +264,23 @@ Rectangle {
                     id: samplesRow
                     spacing: 10
 
-                    Rectangle {
+                    AppButton {
                         id: minusBtn
-                        width: 48; height: 48; radius: 10
-                        color: minusMA.pressed ? "#1d4ed8" : "#1e293b"
-                        border.color: "#475569"; border.width: 1
-                        Text { anchors.centerIn: parent; text: "−"; color: "white"; font.pixelSize: 24; font.weight: Font.Bold }
-                        MouseArea {
-                            id: minusMA
-                            anchors.fill: parent
-                            onPressed: {
-                                if (!root._debounce()) return
-                                root.samplesPerPose = Math.max(3, root.samplesPerPose - 1)
-                            }
+                        width: 48; height: 48
+                        text: "−"
+                        fontSize: 24
+                        background: Rectangle {
+                            radius: 10
+                            color: minusBtn.pressed ? "#1d4ed8" : "#1e293b"
+                            border.color: "#475569"; border.width: 1
                         }
+                        contentItem: Text {
+                            text: minusBtn.text
+                            color: "white"; font.pixelSize: 24; font.weight: Font.Bold
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: root.samplesPerPose = Math.max(3, root.samplesPerPose - 1)
                     }
 
                     // Champ éditable : permet de taper directement la valeur (clavier Qt VKB en mode numérique)
@@ -317,20 +308,23 @@ Rectangle {
                         }
                     }
 
-                    Rectangle {
+                    AppButton {
                         id: plusBtn
-                        width: 48; height: 48; radius: 10
-                        color: plusMA.pressed ? "#1d4ed8" : "#1e293b"
-                        border.color: "#475569"; border.width: 1
-                        Text { anchors.centerIn: parent; text: "+"; color: "white"; font.pixelSize: 24; font.weight: Font.Bold }
-                        MouseArea {
-                            id: plusMA
-                            anchors.fill: parent
-                            onPressed: {
-                                if (!root._debounce()) return
-                                root.samplesPerPose = Math.min(30, root.samplesPerPose + 1)
-                            }
+                        width: 48; height: 48
+                        text: "+"
+                        fontSize: 24
+                        background: Rectangle {
+                            radius: 10
+                            color: plusBtn.pressed ? "#1d4ed8" : "#1e293b"
+                            border.color: "#475569"; border.width: 1
                         }
+                        contentItem: Text {
+                            text: plusBtn.text
+                            color: "white"; font.pixelSize: 24; font.weight: Font.Bold
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: root.samplesPerPose = Math.min(30, root.samplesPerPose + 1)
                     }
                 }
 
@@ -343,24 +337,16 @@ Rectangle {
             }
 
             // Bouton démarrer (en bas)
-            Rectangle {
+            AppButton {
                 anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                height: 44; radius: 10
-                color: root.userName.length > 0 ? "#2563eb" : "#1e293b"
-                opacity: root.userName.length > 0 ? 1 : 0.5
-                Text {
-                    anchors.centerIn: parent
-                    text: "Démarrer l'enrôlement"
-                    color: "white"; font.pixelSize: 13; font.weight: Font.Bold
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: root.userName.length > 0
-                    onPressed: {
-                        root.errorMsg = ""
-                        if (root.keyboard) root.keyboard.close()
-                        root.controller.startEnroll(root.userName, root.userRole, root.samplesPerPose)
-                    }
+                height: 44
+                variant: "primary"
+                enabled: root.userName.length > 0
+                text: "Démarrer l'enrôlement"
+                onClicked: {
+                    root.errorMsg = ""
+                    if (root.keyboard) root.keyboard.close()
+                    root.controller.startEnroll(root.userName, root.userRole, root.samplesPerPose)
                 }
             }
         }
@@ -617,28 +603,27 @@ Rectangle {
                 anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
                 spacing: 8
 
-                Rectangle {
-                    width: (parent.width - 8) / 2; height: 44; radius: 10
-                    color: "#1e293b"; border.color: "#7f1d1d"
-                    Text { anchors.centerIn: parent; text: "Annuler"; color: "#fca5a5"; font.pixelSize: 13 }
-                    MouseArea {
-                        anchors.fill: parent
-                        onPressed: root.close()   // close() s'occupe du cancelEnroll si state==="live"
+                AppButton {
+                    width: (parent.width - 8) / 2; height: 44
+                    text: "Annuler"
+                    background: Rectangle {
+                        radius: 10
+                        color: "#1e293b"; border.color: "#7f1d1d"; border.width: 1
                     }
+                    contentItem: Text {
+                        text: parent.text
+                        color: "#fca5a5"; font.pixelSize: 13
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: root.close()
                 }
-                Rectangle {
-                    width: (parent.width - 8) / 2; height: 44; radius: 10
-                    color: root.status.enroll_complete ? "#16a34a" : "#1e293b"
-                    opacity: root.status.enroll_complete ? 1 : 0.5
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Valider"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: root.status.enroll_complete === true
-                        onPressed: root.controller.finalizeEnroll()
-                    }
+                AppButton {
+                    width: (parent.width - 8) / 2; height: 44
+                    variant: "success"
+                    enabled: root.status.enroll_complete === true
+                    text: "Valider"
+                    onClicked: root.controller.finalizeEnroll()
                 }
             }
         }
@@ -758,14 +743,14 @@ Rectangle {
                 onTextChanged: doneSubtitle.text = text
             }
 
-            Rectangle {
+            AppButton {
                 id: closeBtn
                 anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: 24 }
-                width: 180; height: 44; radius: 10
-                color: closeMA.pressed ? "#1d4ed8" : "#2563eb"
+                width: 180; height: 44
+                variant: "primary"
+                text: "Fermer"
                 opacity: 0
-                Text { anchors.centerIn: parent; text: "Fermer"; color: "white"; font.pixelSize: 13; font.weight: Font.Bold }
-                MouseArea { id: closeMA; anchors.fill: parent; onPressed: root.close() }
+                onClicked: root.close()
             }
 
             // Séquence d'animation : halo+cercle scale → checkmark draw → texte fade

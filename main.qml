@@ -379,9 +379,7 @@ Window {
             id: faceSettings
             controller: root._ctrl
             onClosed: adminMenu.open()
-            onOpenEnroll: Qt.callLater(function() {
-                faceSettings.visible = false; enrollment.open()
-            })
+            onOpenEnroll: { faceSettings.visible = false; enrollment.open() }
         }
 
         // ── Enrolment modal (sous-modal de FaceSettings) ─────────────────────

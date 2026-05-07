@@ -44,7 +44,7 @@ Rectangle {
     }
 
     // Backdrop tap → close
-    MouseArea { anchors.fill: parent; onPressed: root.close() }
+    MouseArea { anchors.fill: parent; onClicked: root.close() }
 
     // ── Card ─────────────────────────────────────────────────────────────────
     Rectangle {
@@ -55,7 +55,7 @@ Rectangle {
         color: "#0f172a"
         border.color: "#334155"
 
-        MouseArea { anchors.fill: parent; onPressed: {} }  // absorb backdrop
+        MouseArea { anchors.fill: parent; onClicked: {} }  // absorb backdrop
 
         // Header
         Rectangle {

@@ -28,7 +28,7 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            onPressed: root.dismissed()
+            onClicked: root.dismissed()
         }
     }
 
