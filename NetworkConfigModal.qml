@@ -45,13 +45,9 @@ Rectangle {
         if (controller) controller.getNetworkInfo()
     }
     function close() {
-        // Defer la fermeture pour que le release du tap soit livré avant
-        // de cacher la MouseArea source (sinon ghost touch + warning A133).
-        Qt.callLater(function() {
-            visible = false
-            if (keyboard) keyboard.close()
-            closed()
-        })
+        visible = false
+        if (keyboard) keyboard.close()
+        closed()
     }
 
     Connections {
@@ -92,7 +88,7 @@ Rectangle {
     }
 
     // Backdrop : absorbe les taps → ne ferme pas le modal sur tap arrière-plan
-    MouseArea { anchors.fill: parent; onPressed: mouse.accepted = true }
+    MouseArea { anchors.fill: parent; onClicked: {} }
 
     // ── Carte ───────────────────────────────────────────────────────────────
     Rectangle {
@@ -108,7 +104,7 @@ Rectangle {
         color: "#0f172a"
         border.color: "#334155"
 
-        MouseArea { anchors.fill: parent; onPressed: mouse.accepted = true }
+        MouseArea { anchors.fill: parent; onClicked: {} }
 
         // ─── Header ─────────────────────────────────────────────────────────
         Rectangle {
@@ -248,7 +244,7 @@ Rectangle {
                     }
                     MouseArea {
                         anchors.fill: parent
-                        onPressed: {
+                        onClicked: {
                             root.tab = modelData.id
                             root.errorMsg = ""; root.statusMsg = ""
                             if (modelData.id === "wifi" && root.wifiList.length === 0) {
@@ -286,7 +282,7 @@ Rectangle {
                     width: 22; height: 22; radius: 11
                     color: errCloseMA.pressed ? "#7f1d1d" : "transparent"
                     Text { anchors.centerIn: parent; text: "×"; color: "#fca5a5"; font.pixelSize: 16; font.weight: Font.Bold }
-                    MouseArea { id: errCloseMA; anchors.fill: parent; onPressed: root.errorMsg = "" }
+                    MouseArea { id: errCloseMA; anchors.fill: parent; onClicked: root.errorMsg = "" }
                 }
             }
             Rectangle {
@@ -305,7 +301,7 @@ Rectangle {
                     width: 22; height: 22; radius: 11
                     color: okCloseMA.pressed ? "#14532d" : "transparent"
                     Text { anchors.centerIn: parent; text: "×"; color: "#86efac"; font.pixelSize: 16; font.weight: Font.Bold }
-                    MouseArea { id: okCloseMA; anchors.fill: parent; onPressed: root.statusMsg = "" }
+                    MouseArea { id: okCloseMA; anchors.fill: parent; onClicked: root.statusMsg = "" }
                 }
             }
         }
@@ -428,13 +424,20 @@ Rectangle {
                     text: "Réseaux disponibles"
                     color: "#cbd5e1"; font.pixelSize: 12; font.weight: Font.DemiBold
                 }
-                Rectangle {
+                AppButton {
                     id: scanBtn
                     anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                    width: 96; height: 28; radius: 8
-                    color: scanMA.pressed ? "#1d4ed8" : "#1e293b"
-                    border.color: "#334155"
-                    Row {
+                    width: 96; height: 28
+                    variant: "secondary"
+                    enabled: !root.busy
+                    text: root.busy ? "Scan…" : "Scanner"
+                    fontSize: 11; bold: false
+                    onClicked: {
+                        root.errorMsg = ""; root.statusMsg = ""
+                        root.busy = true
+                        root.controller.scanWifi()
+                    }
+                    contentItem: Row {
                         anchors.centerIn: parent
                         spacing: 6
                         Spinner {
@@ -445,18 +448,8 @@ Rectangle {
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: root.busy ? "Scan…" : "Scanner"
+                            text: scanBtn.text
                             color: "#cbd5e1"; font.pixelSize: 11; font.weight: Font.DemiBold
-                        }
-                    }
-                    MouseArea {
-                        id: scanMA
-                        anchors.fill: parent
-                        enabled: !root.busy
-                        onPressed: {
-                            root.errorMsg = ""; root.statusMsg = ""
-                            root.busy = true
-                            root.controller.scanWifi()
                         }
                     }
                 }
@@ -571,7 +564,7 @@ Rectangle {
 
                         MouseArea {
                             anchors.fill: parent
-                            onPressed: {
+                            onClicked: {
                                 root.wifiSelectedSsid = modelData.ssid
                                 root.wifiSelectedSecurity = modelData.security || ""
                                 root.wifiPassword = ""
@@ -634,7 +627,7 @@ Rectangle {
                                 width: 22; height: 22; radius: 11
                                 color: deselMA.pressed ? "#334155" : "transparent"
                                 Text { anchors.centerIn: parent; text: "×"; color: "#94a3b8"; font.pixelSize: 14; font.weight: Font.Bold }
-                                MouseArea { id: deselMA; anchors.fill: parent; onPressed: {
+                                MouseArea { id: deselMA; anchors.fill: parent; onClicked: {
                                         root.wifiSelectedSsid = ""; root.wifiSelectedSecurity = ""; root.wifiPassword = ""
                                         if (typeof wifiPwInput !== "undefined") wifiPwInput.text = ""
                                     }
@@ -673,7 +666,7 @@ Rectangle {
                                     color: root.wifiMode === modelData.id ? "white" : "#94a3b8"
                                     font.pixelSize: 11; font.weight: Font.Bold
                                 }
-                                MouseArea { anchors.fill: parent; onPressed: root.wifiMode = modelData.id }
+                                MouseArea { anchors.fill: parent; onClicked: root.wifiMode = modelData.id }
                             }
                         }
                     }
@@ -730,15 +723,21 @@ Rectangle {
             }
 
             // Bouton Se connecter (full-width, en bas)
-            Rectangle {
+            AppButton {
                 id: connectBtn
                 anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                height: 46; radius: 10
-                color: (root.wifiSelectedSsid === "" || root.busy) ? "#1e293b" : "#2563eb"
-                opacity: (root.wifiSelectedSsid === "" || root.busy) ? 0.5 : 1
-                Behavior on color { ColorAnimation { duration: 150 } }
-
-                Row {
+                height: 46
+                variant: "primary"
+                enabled: root.wifiSelectedSsid !== "" && !root.busy
+                text: root.busy ? "Connexion…" : "Se connecter"
+                onClicked: {
+                    root.errorMsg = ""; root.statusMsg = ""; root.busy = true
+                    if (root.keyboard) root.keyboard.close()
+                    root.controller.connectWifi(
+                        root.wifiSelectedSsid, root.wifiPassword, root.wifiMode,
+                        root.wifiIp, root.wifiPrefix, root.wifiGw, root.wifiDns)
+                }
+                contentItem: Row {
                     anchors.centerIn: parent
                     spacing: 8
                     Spinner {
@@ -748,19 +747,8 @@ Rectangle {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.busy ? "Connexion…" : "Se connecter"
+                        text: connectBtn.text
                         color: "white"; font.pixelSize: 13; font.weight: Font.Bold
-                    }
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: root.wifiSelectedSsid !== "" && !root.busy
-                    onPressed: {
-                        root.errorMsg = ""; root.statusMsg = ""; root.busy = true
-                        if (root.keyboard) root.keyboard.close()
-                        root.controller.connectWifi(
-                            root.wifiSelectedSsid, root.wifiPassword, root.wifiMode,
-                            root.wifiIp, root.wifiPrefix, root.wifiGw, root.wifiDns)
                     }
                 }
             }
@@ -816,7 +804,7 @@ Rectangle {
                                 color: root.ethMode === modelData.id ? "white" : "#94a3b8"
                                 font.pixelSize: 11; font.weight: Font.Bold
                             }
-                            MouseArea { anchors.fill: parent; onPressed: root.ethMode = modelData.id }
+                            MouseArea { anchors.fill: parent; onClicked: root.ethMode = modelData.id }
                         }
                     }
                 }
@@ -866,12 +854,19 @@ Rectangle {
                 Item { width: 1; height: 4 }
 
                 // Bouton Appliquer (full-width)
-                Rectangle {
-                    width: parent.width; height: 46; radius: 10
-                    color: root.busy ? "#1e293b" : "#2563eb"
-                    opacity: root.busy ? 0.5 : 1
-                    Behavior on color { ColorAnimation { duration: 150 } }
-                    Row {
+                AppButton {
+                    id: applyBtn
+                    width: parent.width; height: 46
+                    variant: "primary"
+                    enabled: !root.busy
+                    text: root.busy ? "Application…" : "Appliquer"
+                    onClicked: {
+                        root.errorMsg = ""; root.statusMsg = ""; root.busy = true
+                        if (root.keyboard) root.keyboard.close()
+                        root.controller.setEthernet(
+                            root.ethMode, root.ethIp, root.ethPrefix, root.ethGw, root.ethDns)
+                    }
+                    contentItem: Row {
                         anchors.centerIn: parent
                         spacing: 8
                         Spinner {
@@ -881,18 +876,8 @@ Rectangle {
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: root.busy ? "Application…" : "Appliquer"
+                            text: applyBtn.text
                             color: "white"; font.pixelSize: 13; font.weight: Font.Bold
-                        }
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: !root.busy
-                        onPressed: {
-                            root.errorMsg = ""; root.statusMsg = ""; root.busy = true
-                            if (root.keyboard) root.keyboard.close()
-                            root.controller.setEthernet(
-                                root.ethMode, root.ethIp, root.ethPrefix, root.ethGw, root.ethDns)
                         }
                     }
                 }
@@ -909,13 +894,12 @@ Rectangle {
             Rectangle { anchors { top: parent.top; left: parent.left; right: parent.right }
                         height: 1; color: "#1e293b" }
 
-            Rectangle {
+            AppButton {
                 anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                width: 100; height: 34; radius: 10
-                color: closeFooterMA.pressed ? "#0f172a" : "#1e293b"
-                border.color: "#475569"
-                Text { anchors.centerIn: parent; text: "Fermer"; color: "#cbd5e1"; font.pixelSize: 12 }
-                MouseArea { id: closeFooterMA; anchors.fill: parent; onPressed: root.close() }
+                width: 100; height: 34
+                variant: "secondary"
+                text: "Fermer"; fontSize: 12; bold: false
+                onClicked: root.close()
             }
         }
     }
