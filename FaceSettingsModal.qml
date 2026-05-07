@@ -21,9 +21,12 @@ Rectangle {
         if (controller) controller.listFaceUsers()
     }
     function close() {
-        visible = false
-        confirmDelete.visible = false
-        closed()
+        // Defer (A133 evdev : cacher MouseArea dans onPressed perd le release).
+        Qt.callLater(function() {
+            visible = false
+            confirmDelete.visible = false
+            closed()
+        })
     }
 
     Connections {

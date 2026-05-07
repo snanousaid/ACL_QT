@@ -45,9 +45,13 @@ Rectangle {
         if (controller) controller.getNetworkInfo()
     }
     function close() {
-        visible = false
-        if (keyboard) keyboard.close()
-        closed()
+        // Defer la fermeture pour que le release du tap soit livré avant
+        // de cacher la MouseArea source (sinon ghost touch + warning A133).
+        Qt.callLater(function() {
+            visible = false
+            if (keyboard) keyboard.close()
+            closed()
+        })
     }
 
     Connections {

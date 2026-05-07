@@ -237,10 +237,15 @@ Window {
                 id: settingsMA
                 anchors.fill: parent
                 onPressed: {
-                    settingsBtn.visible = false
-                    passwordModal.visible = true
-                    root.adminVisible = true
-                    controller.pauseRecognition()
+                    // Pas de settingsBtn.visible=false ici (cacherait cette
+                    // MouseArea avant le release → ghost touch + warning).
+                    // Le modal (z:40) couvre le bouton (z:30), settingsHideTimer
+                    // le masquera apres 6s.
+                    Qt.callLater(function() {
+                        passwordModal.visible = true
+                        root.adminVisible = true
+                        controller.pauseRecognition()
+                    })
                 }
             }
         }
@@ -320,11 +325,13 @@ Window {
                             MouseArea {
                                 anchors.fill: parent
                                 onPressed: {
-                                    passwordModal.visible = false
-                                    pwInput.text = ""; keyboard.close()
-                                    pwError.visible = false
-                                    root.adminVisible = false
-                                    controller.resumeRecognition()
+                                    Qt.callLater(function() {
+                                        passwordModal.visible = false
+                                        pwInput.text = ""; keyboard.close()
+                                        pwError.visible = false
+                                        root.adminVisible = false
+                                        controller.resumeRecognition()
+                                    })
                                 }
                             }
                         }
@@ -346,11 +353,15 @@ Window {
 
             function checkPassword() {
                 if (pwInput.text === "2899100*-+") {
-                    keyboard.close()
-                    passwordModal.visible = false
-                    pwInput.text = ""
-                    pwError.visible = false
-                    adminMenu.open()   // → admin menu, recognition reste pausée
+                    // Defer le close → release du tap "Valider" est livré avant
+                    // de cacher le modal (sinon ghost touch + warning).
+                    Qt.callLater(function() {
+                        keyboard.close()
+                        passwordModal.visible = false
+                        pwInput.text = ""
+                        pwError.visible = false
+                        adminMenu.open()
+                    })
                 } else {
                     pwError.visible = true
                 }
@@ -360,11 +371,13 @@ Window {
                 anchors.fill: parent
                 z: -1
                 onPressed: {
-                    passwordModal.visible = false
-                    pwInput.text = ""; keyboard.close()
-                    pwError.visible = false
-                    root.adminVisible = false
-                    controller.resumeRecognition()
+                    Qt.callLater(function() {
+                        passwordModal.visible = false
+                        pwInput.text = ""; keyboard.close()
+                        pwError.visible = false
+                        root.adminVisible = false
+                        controller.resumeRecognition()
+                    })
                 }
             }
         }
@@ -398,7 +411,9 @@ Window {
             id: faceSettings
             controller: root._ctrl
             onClosed: adminMenu.open()
-            onOpenEnroll: { faceSettings.visible = false; enrollment.open() }
+            onOpenEnroll: Qt.callLater(function() {
+                faceSettings.visible = false; enrollment.open()
+            })
         }
 
         // ── Enrolment modal (sous-modal de FaceSettings) ─────────────────────

@@ -59,11 +59,14 @@ Rectangle {
         if (typeof nameInput !== "undefined") nameInput.text = ""
     }
     function close() {
-        if (state === "live") controller.cancelEnroll()
-        pollTimer.stop()
-        visible = false
-        if (keyboard) keyboard.close()
-        closed()
+        // Defer la fermeture (cf. NetworkConfigModal.close) — A133 evdev.
+        Qt.callLater(function() {
+            if (state === "live") controller.cancelEnroll()
+            pollTimer.stop()
+            visible = false
+            if (keyboard) keyboard.close()
+            closed()
+        })
     }
 
     Connections {

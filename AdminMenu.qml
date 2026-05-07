@@ -12,7 +12,10 @@ Rectangle {
     signal closed()
 
     function open()  { visible = true  }
-    function close() { visible = false; closed() }
+    function close() {
+        // Defer (A133 evdev : cacher MouseArea dans onPressed perd le release).
+        Qt.callLater(function() { visible = false; closed() })
+    }
 
     // Backdrop
     MouseArea { anchors.fill: parent; onPressed: root.close() }
@@ -98,7 +101,9 @@ Rectangle {
 
                     MouseArea {
                         anchors.fill: parent
-                        onPressed: { root.visible = false; root.openNetwork() }
+                        onPressed: Qt.callLater(function() {
+                            root.visible = false; root.openNetwork()
+                        })
                     }
                 }
 
@@ -153,7 +158,9 @@ Rectangle {
 
                     MouseArea {
                         anchors.fill: parent
-                        onPressed: { root.visible = false; root.openFace() }
+                        onPressed: Qt.callLater(function() {
+                            root.visible = false; root.openFace()
+                        })
                     }
                 }
             }

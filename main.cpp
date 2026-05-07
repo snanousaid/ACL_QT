@@ -51,11 +51,7 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine engine;
     engine.addImageProvider(QStringLiteral("camera"), imgProvider);
     engine.rootContext()->setContextProperty(QStringLiteral("controller"), ctrl);
-    // ── DIAGNOSTIC TEMPORAIRE : charge TouchTest.qml au lieu de main.qml ────
-    // Pour identifier la cause des warnings TouchPointPressed sur A133.
-    // À retirer après diagnostic — remettre "qrc:/main.qml".
-    engine.load(QUrl(QStringLiteral("qrc:/TouchTest.qml")));
-    // engine.load(QUrl(QStringLiteral("qrc:/main.qml")));
+    engine.load(QUrl(QStringLiteral("qrc:/main.qml")));
     if (engine.rootObjects().isEmpty())
         return -1;
 
