@@ -174,21 +174,38 @@ Rectangle {
                     {id: "wifi",     label: "Wi-Fi",    icon: "wifi"},
                     {id: "ethernet", label: "Ethernet", icon: "ethernet"}
                 ]
-                Rectangle {
+                AppButton {
+                    id: tabBtn
                     width: tabs.width / 3
                     height: tabs.height
-                    color: "transparent"
+                    text: ""
+                    property bool isActive: root.tab === modelData.id
 
-                    Row {
-                        anchors.centerIn: parent
+                    background: Item {
+                        // Underline en bas
+                        Rectangle {
+                            anchors { bottom: parent.bottom; left: parent.left; right: parent.right
+                                      leftMargin: 16; rightMargin: 16 }
+                            height: 2; radius: 1
+                            color: tabBtn.isActive ? "#3b82f6" : "transparent"
+                            Behavior on color { ColorAnimation { duration: 200 } }
+                        }
+                        // Léger fond pressed
+                        Rectangle {
+                            anchors.fill: parent
+                            color: tabBtn.pressed ? "#1e293b" : "transparent"
+                            opacity: 0.5
+                        }
+                    }
+
+                    contentItem: Row {
                         spacing: 6
 
                         // Icône Canvas selon le tab
                         Canvas {
-                            id: tabIcon
                             width: 14; height: 14
                             anchors.verticalCenter: parent.verticalCenter
-                            property color col: root.tab === modelData.id ? "#60a5fa" : "#64748b"
+                            property color col: tabBtn.isActive ? "#60a5fa" : "#64748b"
                             onColChanged: requestPaint()
                             Component.onCompleted: requestPaint()
 
@@ -201,7 +218,6 @@ Rectangle {
                                 ctx.lineCap     = "round"
 
                                 if (modelData.icon === "info") {
-                                    // Cercle ⓘ
                                     ctx.beginPath(); ctx.arc(width/2, height/2, width*0.45, 0, Math.PI*2); ctx.stroke()
                                     ctx.beginPath(); ctx.arc(width/2, height*0.32, 1.2, 0, Math.PI*2); ctx.fill()
                                     ctx.beginPath(); ctx.moveTo(width/2, height*0.45); ctx.lineTo(width/2, height*0.75); ctx.stroke()
@@ -230,27 +246,18 @@ Rectangle {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: modelData.label
-                            color: root.tab === modelData.id ? "#60a5fa" : "#64748b"
+                            color: tabBtn.isActive ? "#60a5fa" : "#64748b"
                             font.pixelSize: 12
-                            font.weight: root.tab === modelData.id ? Font.Bold : Font.Medium
+                            font.weight: tabBtn.isActive ? Font.Bold : Font.Medium
                         }
                     }
 
-                    Rectangle {
-                        anchors { bottom: parent.bottom; left: parent.left; right: parent.right; leftMargin: 16; rightMargin: 16 }
-                        height: 2; radius: 1
-                        color: root.tab === modelData.id ? "#3b82f6" : "transparent"
-                        Behavior on color { ColorAnimation { duration: 200 } }
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            root.tab = modelData.id
-                            root.errorMsg = ""; root.statusMsg = ""
-                            if (modelData.id === "wifi" && root.wifiList.length === 0) {
-                                root.busy = true
-                                root.controller.scanWifi()
-                            }
+                    onClicked: {
+                        root.tab = modelData.id
+                        root.errorMsg = ""; root.statusMsg = ""
+                        if (modelData.id === "wifi" && root.wifiList.length === 0) {
+                            root.busy = true
+                            root.controller.scanWifi()
                         }
                     }
                 }
