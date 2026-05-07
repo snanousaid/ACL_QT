@@ -3,18 +3,18 @@ import QtQuick.Window 2.10
 import QtQuick.Controls 2.5
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Test isolé : 4 scénarios de boutons pour identifier la cause des warnings
-// "TouchPointPressed without previous release event" sur A133.
+// VALIDATION : choisir entre Plan A (Button) et Plan B (MouseArea + onClicked)
 //
-// Pour le lancer temporairement sur la board :
-//   qmlscene /opt/ACL_qt/qml-test/TouchTest.qml
-// (ou modifier engine.load(QUrl("qrc:/TouchTest.qml")) dans main.cpp)
+// Pour chaque test :
+//   - Tap plusieurs fois (5+ taps)
+//   - Pour les tests "+ HIDE" : attendre 1.5s que le bouton revienne, retap
+//   - Vérifier dans logs : aucun "TouchPointPressed without previous release"
 //
-// Observer dans les logs :
-//   - Test 1 (no hide)         : pas de warning attendu
-//   - Test 2 (hide in onPressed): warning attendu sur le 2e tap
-//   - Test 3 (Qt.callLater)    : pas de warning attendu (fix proposé)
-//   - Test 4 (compteurs P/R)   : si pressed != released, releases sont perdus
+// Decision :
+//   * Tous les 4 tests OK     → Plan A ou Plan B au choix
+//   * Plan A KO, Plan B OK    → Plan B (MouseArea.onClicked)
+//   * Inverse                 → Plan A (Button)
+//   * Les 2 KO sur HIDE       → garder code actuel (Qt.callLater)
 // ─────────────────────────────────────────────────────────────────────────────
 
 Window {
@@ -23,208 +23,118 @@ Window {
     width: 1024
     height: 600
     color: "#0d1117"
-    title: "Touch Test A133"
-
-    // PAS DE ROTATION pour isoler la cause
+    title: "Touch Test — Plan A vs Plan B"
 
     Column {
         anchors.centerIn: parent
         spacing: 16
 
         Text {
-            text: "Touch Test — vérifier logs Qt"
-            color: "#cbd5e1"; font.pixelSize: 16
+            text: "Validation : Plan A (Button) vs Plan B (MouseArea + onClicked)"
+            color: "#cbd5e1"; font.pixelSize: 16; font.weight: Font.Bold
             anchors.horizontalCenter: parent.horizontalCenter
         }
 
-        // ── Test 1 : simple compteur (pas de modif visibilité) ──────────────
-        Rectangle {
-            width: 700; height: 60; radius: 10
-            color: ma1.pressed ? "#1e3a8a" : "#2563eb"
-            property int n: 0
-            Text {
-                anchors.centerIn: parent
-                text: "Test 1 — taps : " + parent.n + "  (pas de modif visibilité)"
-                color: "white"; font.pixelSize: 14; font.weight: Font.Bold
-            }
-            MouseArea {
-                id: ma1
-                anchors.fill: parent
-                onPressed: parent.n++
-            }
+        Text {
+            text: "Tap chaque bouton 5+ fois — observe les logs pour les warnings TouchPointPressed"
+            color: "#94a3b8"; font.pixelSize: 11
+            anchors.horizontalCenter: parent.horizontalCenter
         }
 
-        // ── Test 2 : hide IMMÉDIAT dans onPressed (suspect du bug) ──────────
-        Item {
-            width: 700; height: 60
-            Rectangle {
-                id: btn2
-                anchors.fill: parent; radius: 10
-                color: ma2.pressed ? "#7f1d1d" : "#dc2626"
-                Text {
-                    anchors.centerIn: parent
-                    text: "Test 2 — HIDE IN onPressed (suspect du warning)"
-                    color: "white"; font.pixelSize: 14; font.weight: Font.Bold
-                }
-                MouseArea {
-                    id: ma2
-                    anchors.fill: parent
-                    onPressed: btn2.visible = false   // ← hide IMMÉDIAT
-                }
-            }
-            Timer {
-                interval: 1500
-                running: !btn2.visible
-                onTriggered: btn2.visible = true
-            }
+        Item { width: 1; height: 12 }
+
+        // ═════════════════════ PLAN A — Button + onClicked ═════════════════
+        Text {
+            text: "── PLAN A : QtQuick.Controls Button ──"
+            color: "#60a5fa"; font.pixelSize: 13; font.weight: Font.Bold
+            anchors.horizontalCenter: parent.horizontalCenter
         }
 
-        // ── Test 3 : hide via Qt.callLater (fix proposé) ────────────────────
-        Item {
-            width: 700; height: 60
-            Rectangle {
-                id: btn3
-                anchors.fill: parent; radius: 10
-                color: ma3.pressed ? "#14532d" : "#16a34a"
-                Text {
-                    anchors.centerIn: parent
-                    text: "Test 3 — HIDE via Qt.callLater (fix)"
-                    color: "white"; font.pixelSize: 14; font.weight: Font.Bold
-                }
-                MouseArea {
-                    id: ma3
-                    anchors.fill: parent
-                    onPressed: Qt.callLater(function() { btn3.visible = false })
-                }
-            }
-            Timer {
-                interval: 1500
-                running: !btn3.visible
-                onTriggered: btn3.visible = true
-            }
-        }
-
-        // ── Test 4 : compteurs Press / Release pour détecter événements perdus
-        Rectangle {
-            width: 700; height: 80; radius: 10
-            color: "#1e293b"; border.color: "#475569"
-            property int p: 0
-            property int r: 0
-            Column {
-                anchors.centerIn: parent
-                spacing: 4
-                Text {
-                    text: "Test 4 — Press: " + parent.parent.p + "   Release: " + parent.parent.r
-                    color: "#cbd5e1"; font.pixelSize: 14; font.weight: Font.Bold
-                }
-                Text {
-                    text: "Si Press > Release : le driver A133 perd des releases."
-                    color: "#94a3b8"; font.pixelSize: 11
-                }
-            }
-            MouseArea {
-                anchors.fill: parent
-                onPressed:  parent.p++
-                onReleased: parent.r++
-            }
-        }
-
-        // ── Test 5 : le même Test 1 mais avec rotation 90° (isole la rotation)
-        Item {
-            width: 700; height: 80
-            Rectangle {
-                id: rotItem
-                anchors.centerIn: parent
-                width: 700; height: 60
-                rotation: 90  // rotation 90° → bbox 60×700
-                radius: 10
-                color: ma5.pressed ? "#581c87" : "#9333ea"
-                property int n: 0
-                Text {
-                    anchors.centerIn: parent
-                    text: "Test 5 — rotation 90° taps: " + parent.n
-                    color: "white"; font.pixelSize: 14; font.weight: Font.Bold
-                }
-                MouseArea {
-                    id: ma5
-                    anchors.fill: parent
-                    onPressed: parent.n++
-                }
-            }
-        }
-
-        // ── Test 6 : onClicked simple (sans hide, compteur) ────────────────
-        // Doit fire UNE fois par tap (Press + Release dans la zone).
-        Rectangle {
-            width: 700; height: 60; radius: 10
-            color: ma6.pressed ? "#0e7490" : "#0891b2"
-            property int n: 0
-            Text {
-                anchors.centerIn: parent
-                text: "Test 6 — onClicked compteur : " + parent.n
-                color: "white"; font.pixelSize: 14; font.weight: Font.Bold
-            }
-            MouseArea {
-                id: ma6
-                anchors.fill: parent
-                onClicked: parent.n++
-            }
-        }
-
-        // ── Test 7 : onClicked + HIDE (mimique fermeture modal) ────────────
-        // Le release est livre AVANT que onClicked fire → le hide est sain.
-        // Si pas de warning ici → on peut migrer toute l'app vers onClicked.
-        Item {
-            width: 700; height: 60
-            Rectangle {
-                id: btn7
-                anchors.fill: parent; radius: 10
-                color: ma7.pressed ? "#7c2d12" : "#ea580c"
-                Text {
-                    anchors.centerIn: parent
-                    text: "Test 7 — onClicked + HIDE (cible migration)"
-                    color: "white"; font.pixelSize: 14; font.weight: Font.Bold
-                }
-                MouseArea {
-                    id: ma7
-                    anchors.fill: parent
-                    onClicked: btn7.visible = false   // hide DANS onClicked
-                }
-            }
-            Timer {
-                interval: 1500
-                running: !btn7.visible
-                onTriggered: btn7.visible = true
-            }
-        }
-
-        // ── Test 8 : QtQuick.Controls Button + onClicked (exemple user) ────
-        // Composant Button standard Qt (avec gestion auto press/release/click).
-        // C'est le pattern propose pour la migration.
+        // Test A1 : Button compteur (sans hide)
         Button {
-            id: testButton
-            text: "Test 8 — Button onClicked : " + n
+            id: btnA1
+            text: "A1 — Button onClicked compteur : " + n
             width: 700; height: 60
             property int n: 0
             onClicked: {
                 n++
-                console.log("[Test 8] Button clicked!", n)
+                console.log("[A1] Button clicked", n)
             }
         }
 
-        // ── Test 9 : Button + HIDE dans onClicked ──────────────────────────
+        // Test A2 : Button + HIDE (mimique close modal)
         Item {
             width: 700; height: 60
             Button {
-                id: btn9
+                id: btnA2
                 anchors.fill: parent
-                text: "Test 9 — Button onClicked + HIDE"
-                onClicked: btn9.visible = false
+                text: "A2 — Button onClicked + HIDE (revient en 1.5s)"
+                onClicked: {
+                    console.log("[A2] Button clicked, hiding")
+                    btnA2.visible = false
+                }
             }
             Timer {
                 interval: 1500
-                running: !btn9.visible
-                onTriggered: btn9.visible = true
+                running: !btnA2.visible
+                onTriggered: btnA2.visible = true
+            }
+        }
+
+        Item { width: 1; height: 12 }
+
+        // ═════════════════════ PLAN B — MouseArea + onClicked ══════════════
+        Text {
+            text: "── PLAN B : Rectangle + MouseArea + onClicked ──"
+            color: "#22c55e"; font.pixelSize: 13; font.weight: Font.Bold
+            anchors.horizontalCenter: parent.horizontalCenter
+        }
+
+        // Test B1 : MouseArea compteur (sans hide)
+        Rectangle {
+            width: 700; height: 60; radius: 10
+            color: maB1.pressed ? "#0e7490" : "#0891b2"
+            property int n: 0
+            Text {
+                anchors.centerIn: parent
+                text: "B1 — MouseArea.onClicked compteur : " + parent.n
+                color: "white"; font.pixelSize: 14; font.weight: Font.Bold
+            }
+            MouseArea {
+                id: maB1
+                anchors.fill: parent
+                onClicked: {
+                    parent.n++
+                    console.log("[B1] MouseArea clicked", parent.n)
+                }
+            }
+        }
+
+        // Test B2 : MouseArea + HIDE (mimique close modal)
+        Item {
+            width: 700; height: 60
+            Rectangle {
+                id: btnB2
+                anchors.fill: parent; radius: 10
+                color: maB2.pressed ? "#7c2d12" : "#ea580c"
+                Text {
+                    anchors.centerIn: parent
+                    text: "B2 — MouseArea.onClicked + HIDE (revient en 1.5s)"
+                    color: "white"; font.pixelSize: 14; font.weight: Font.Bold
+                }
+                MouseArea {
+                    id: maB2
+                    anchors.fill: parent
+                    onClicked: {
+                        console.log("[B2] MouseArea clicked, hiding")
+                        btnB2.visible = false
+                    }
+                }
+            }
+            Timer {
+                interval: 1500
+                running: !btnB2.visible
+                onTriggered: btnB2.visible = true
             }
         }
     }
