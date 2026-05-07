@@ -51,7 +51,11 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine engine;
     engine.addImageProvider(QStringLiteral("camera"), imgProvider);
     engine.rootContext()->setContextProperty(QStringLiteral("controller"), ctrl);
-    engine.load(QUrl(QStringLiteral("qrc:/main.qml")));
+    // ── DIAGNOSTIC TEMPORAIRE (Etape 1 : valider onClicked sur A133) ────────
+    // Recharger TouchTest.qml avec Test 6 (onClicked compteur) + Test 7
+    // (onClicked + hide). Apres validation, remettre qrc:/main.qml.
+    engine.load(QUrl(QStringLiteral("qrc:/TouchTest.qml")));
+    // engine.load(QUrl(QStringLiteral("qrc:/main.qml")));
     if (engine.rootObjects().isEmpty())
         return -1;
 

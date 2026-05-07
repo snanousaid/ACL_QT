@@ -1,5 +1,6 @@
 import QtQuick 2.10
 import QtQuick.Window 2.10
+import QtQuick.Controls 2.5
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test isolé : 4 scénarios de boutons pour identifier la cause des warnings
@@ -149,6 +150,81 @@ Window {
                     anchors.fill: parent
                     onPressed: parent.n++
                 }
+            }
+        }
+
+        // ── Test 6 : onClicked simple (sans hide, compteur) ────────────────
+        // Doit fire UNE fois par tap (Press + Release dans la zone).
+        Rectangle {
+            width: 700; height: 60; radius: 10
+            color: ma6.pressed ? "#0e7490" : "#0891b2"
+            property int n: 0
+            Text {
+                anchors.centerIn: parent
+                text: "Test 6 — onClicked compteur : " + parent.n
+                color: "white"; font.pixelSize: 14; font.weight: Font.Bold
+            }
+            MouseArea {
+                id: ma6
+                anchors.fill: parent
+                onClicked: parent.n++
+            }
+        }
+
+        // ── Test 7 : onClicked + HIDE (mimique fermeture modal) ────────────
+        // Le release est livre AVANT que onClicked fire → le hide est sain.
+        // Si pas de warning ici → on peut migrer toute l'app vers onClicked.
+        Item {
+            width: 700; height: 60
+            Rectangle {
+                id: btn7
+                anchors.fill: parent; radius: 10
+                color: ma7.pressed ? "#7c2d12" : "#ea580c"
+                Text {
+                    anchors.centerIn: parent
+                    text: "Test 7 — onClicked + HIDE (cible migration)"
+                    color: "white"; font.pixelSize: 14; font.weight: Font.Bold
+                }
+                MouseArea {
+                    id: ma7
+                    anchors.fill: parent
+                    onClicked: btn7.visible = false   // hide DANS onClicked
+                }
+            }
+            Timer {
+                interval: 1500
+                running: !btn7.visible
+                onTriggered: btn7.visible = true
+            }
+        }
+
+        // ── Test 8 : QtQuick.Controls Button + onClicked (exemple user) ────
+        // Composant Button standard Qt (avec gestion auto press/release/click).
+        // C'est le pattern propose pour la migration.
+        Button {
+            id: testButton
+            text: "Test 8 — Button onClicked : " + n
+            width: 700; height: 60
+            property int n: 0
+            onClicked: {
+                n++
+                console.log("[Test 8] Button clicked!", n)
+            }
+        }
+
+        // ── Test 9 : Button + HIDE dans onClicked ──────────────────────────
+        Item {
+            width: 700; height: 60
+            Button {
+                id: btn9
+                anchors.fill: parent
+                text: "Test 9 — Button onClicked + HIDE"
+                onClicked: btn9.visible = false
+            }
+            Timer {
+                interval: 1500
+                running: !btn9.visible
+                onTriggered: btn9.visible = true
             }
         }
     }
