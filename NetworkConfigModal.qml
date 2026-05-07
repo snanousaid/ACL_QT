@@ -1,4 +1,5 @@
 import QtQuick 2.10
+import QtQuick.Controls 2.5
 
 Rectangle {
     id: root
@@ -526,35 +527,31 @@ Rectangle {
                             color: "#64748b"; font.pixelSize: 11
                         }
 
-                        // ScrollBar visible quand contenu > hauteur
-                        Rectangle {
-                            visible: wifiListView.contentHeight > wifiListView.height
-                            anchors { right: parent.right; rightMargin: 3
-                                      top: parent.top; bottom: parent.bottom; topMargin: 6; bottomMargin: 6 }
-                            width: 4; radius: 2
-                            color: "#1e293b"
-                            Rectangle {
-                                width: parent.width
-                                radius: parent.radius
-                                color: "#60a5fa"
-                                y: wifiListView.height > 0
-                                   ? wifiListView.contentY * (parent.height / wifiListView.contentHeight)
-                                   : 0
-                                height: wifiListView.height > 0
-                                   ? Math.max(20, wifiListView.height * (parent.height / wifiListView.contentHeight))
-                                   : parent.height
-                                Behavior on y { NumberAnimation { duration: 100 } }
-                            }
-                        }
-
                         ListView {
                             id: wifiListView
-                            anchors { fill: parent; margins: 4; rightMargin: 10 }
+                            anchors { fill: parent; margins: 4 }
                             model: root.wifiList
                             spacing: 4
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
-                            // Centre auto sur le SSID sélectionné quand la liste rétrécit
+
+                            // ScrollBar built-in QtQuick.Controls 2.5 - always visible
+                            ScrollBar.vertical: ScrollBar {
+                                id: wifiVbar
+                                active: true
+                                policy: ScrollBar.AlwaysOn
+                                width: 6
+                                contentItem: Rectangle {
+                                    implicitWidth: 6
+                                    radius: 3
+                                    color: wifiVbar.pressed ? "#60a5fa" : "#475569"
+                                }
+                                background: Rectangle {
+                                    color: "#0f172a"; radius: 3
+                                }
+                            }
+
+                            // Centre auto sur le SSID sélectionné
                             currentIndex: {
                                 for (var i = 0; i < root.wifiList.length; i++)
                                     if (root.wifiList[i].ssid === root.wifiSelectedSsid) return i
@@ -562,8 +559,7 @@ Rectangle {
                             }
                             onCurrentIndexChanged: if (currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Center)
 
-                            // Auto-focus du champ password quand un SSID est selectionne
-                            // -> clavier s'ouvre + auto-scroll vers le champ
+                            // Auto-focus password quand SSID selectionne
                             Connections {
                                 target: root
                                 onWifiSelectedSsidChanged: {
@@ -572,13 +568,13 @@ Rectangle {
                                 }
                             }
 
-                            delegate: AppButton {
+                            delegate: ItemDelegate {
                                 id: wifiBtn
                                 property bool isConnected: root.info.wifiSsid === modelData.ssid
                                 property bool isSelected:  root.wifiSelectedSsid === modelData.ssid
-                                width: wifiListView.width
+                                width: wifiListView.width - wifiVbar.width
                                 height: 42
-                                text: ""
+                                padding: 0
 
                                 background: Rectangle {
                                     radius: 8
@@ -591,7 +587,6 @@ Rectangle {
                                 }
 
                                 contentItem: Item {
-                                    // Icône WiFi + SSID + pill/signal/sécurité
                                     Canvas {
                                         anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
                                         width: 20; height: 16
