@@ -431,6 +431,15 @@ Rectangle {
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
 
+                // Scroll auto sur le champ qui prend le focus (clavier visible)
+                function scrollTo(item) {
+                    if (!item) return
+                    var pos = item.mapToItem(wifiContent, 0, 0).y
+                    var target = Math.max(0, pos - height / 3)
+                    var maxY   = Math.max(0, contentHeight - height)
+                    contentY = Math.min(maxY, target)
+                }
+
                 // ScrollBar visible pour indiquer le scroll
                 Rectangle {
                     visible: wifiFlick.contentHeight > wifiFlick.height
@@ -513,10 +522,30 @@ Rectangle {
                             color: "#64748b"; font.pixelSize: 11
                         }
 
+                        // ScrollBar visible quand contenu > hauteur
+                        Rectangle {
+                            visible: wifiListView.contentHeight > wifiListView.height
+                            anchors { right: parent.right; rightMargin: 3
+                                      top: parent.top; bottom: parent.bottom; topMargin: 6; bottomMargin: 6 }
+                            width: 4; radius: 2
+                            color: "#1e293b"
+                            Rectangle {
+                                width: parent.width
+                                radius: parent.radius
+                                color: "#60a5fa"
+                                y: wifiListView.height > 0
+                                   ? wifiListView.contentY * (parent.height / wifiListView.contentHeight)
+                                   : 0
+                                height: wifiListView.height > 0
+                                   ? Math.max(20, wifiListView.height * (parent.height / wifiListView.contentHeight))
+                                   : parent.height
+                                Behavior on y { NumberAnimation { duration: 100 } }
+                            }
+                        }
+
                         ListView {
                             id: wifiListView
-                            anchors.fill: parent
-                            anchors.margins: 4
+                            anchors { fill: parent; margins: 4; rightMargin: 10 }
                             model: root.wifiList
                             spacing: 4
                             clip: true
@@ -696,11 +725,8 @@ Rectangle {
                                 isPassword: true
                                 placeholder: "Mot de passe Wi-Fi"
                                 onTextChanged: root.wifiPassword = text
-                                onActiveFocusChanged: if (activeFocus) Qt.callLater(function() {
-                                    wifiFlick.contentY = Math.min(
-                                        Math.max(0, wifiContent.implicitHeight - wifiFlick.height),
-                                        wifiPwInput.y + wifiPwInput.height / 2)
-                                })
+                                onActiveFocusChanged: if (activeFocus)
+                                    Qt.callLater(function() { wifiFlick.scrollTo(wifiPwInput) })
                             }
                         }
 
@@ -765,22 +791,42 @@ Rectangle {
                                 Column {
                                     width: (parent.width - 6) / 2; spacing: 3
                                     Text { text: "IP"; color: "#94a3b8"; font.pixelSize: 10 }
-                                    KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.50"
-                                              onTextChanged: root.wifiIp = text }
+                                    KbInput {
+                                        id: wifiIpInput
+                                        width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.50"
+                                        onTextChanged: root.wifiIp = text
+                                        onActiveFocusChanged: if (activeFocus)
+                                            Qt.callLater(function() { wifiFlick.scrollTo(wifiIpInput) })
+                                    }
                                 }
                                 Column {
                                     width: (parent.width - 6) / 2; spacing: 3
                                     Text { text: "Préfixe"; color: "#94a3b8"; font.pixelSize: 10 }
-                                    KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "24"
-                                              onTextChanged: root.wifiPrefix = text }
+                                    KbInput {
+                                        id: wifiPrefixInput
+                                        width: parent.width; keyboard: root.keyboard; placeholder: "24"
+                                        onTextChanged: root.wifiPrefix = text
+                                        onActiveFocusChanged: if (activeFocus)
+                                            Qt.callLater(function() { wifiFlick.scrollTo(wifiPrefixInput) })
+                                    }
                                 }
                             }
                             Text { text: "Gateway"; color: "#94a3b8"; font.pixelSize: 10 }
-                            KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.1"
-                                      onTextChanged: root.wifiGw = text }
+                            KbInput {
+                                id: wifiGwInput
+                                width: parent.width; keyboard: root.keyboard; placeholder: "192.168.1.1"
+                                onTextChanged: root.wifiGw = text
+                                onActiveFocusChanged: if (activeFocus)
+                                    Qt.callLater(function() { wifiFlick.scrollTo(wifiGwInput) })
+                            }
                             Text { text: "DNS"; color: "#94a3b8"; font.pixelSize: 10 }
-                            KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "8.8.8.8"
-                                      onTextChanged: root.wifiDns = text }
+                            KbInput {
+                                id: wifiDnsInput
+                                width: parent.width; keyboard: root.keyboard; placeholder: "8.8.8.8"
+                                onTextChanged: root.wifiDns = text
+                                onActiveFocusChanged: if (activeFocus)
+                                    Qt.callLater(function() { wifiFlick.scrollTo(wifiDnsInput) })
+                            }
                         }
                     }
                 }
@@ -829,6 +875,14 @@ Rectangle {
             contentHeight: ethForm.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+
+            function scrollTo(item) {
+                if (!item) return
+                var pos = item.mapToItem(ethForm, 0, 0).y
+                var target = Math.max(0, pos - height / 3)
+                var maxY   = Math.max(0, contentHeight - height)
+                contentY = Math.min(maxY, target)
+            }
 
             Column {
                 id: ethForm
@@ -897,22 +951,42 @@ Rectangle {
                         Column {
                             width: (parent.width - 6) / 2; spacing: 3
                             Text { text: "IP"; color: "#94a3b8"; font.pixelSize: 10 }
-                            KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.10.132"
-                                      onTextChanged: root.ethIp = text }
+                            KbInput {
+                                id: ethIpInput
+                                width: parent.width; keyboard: root.keyboard; placeholder: "192.168.10.132"
+                                onTextChanged: root.ethIp = text
+                                onActiveFocusChanged: if (activeFocus)
+                                    Qt.callLater(function() { ethView.scrollTo(ethIpInput) })
+                            }
                         }
                         Column {
                             width: (parent.width - 6) / 2; spacing: 3
                             Text { text: "Préfixe"; color: "#94a3b8"; font.pixelSize: 10 }
-                            KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "24"
-                                      onTextChanged: root.ethPrefix = text }
+                            KbInput {
+                                id: ethPrefixInput
+                                width: parent.width; keyboard: root.keyboard; placeholder: "24"
+                                onTextChanged: root.ethPrefix = text
+                                onActiveFocusChanged: if (activeFocus)
+                                    Qt.callLater(function() { ethView.scrollTo(ethPrefixInput) })
+                            }
                         }
                     }
                     Text { text: "Gateway"; color: "#94a3b8"; font.pixelSize: 10 }
-                    KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "192.168.10.1"
-                              onTextChanged: root.ethGw = text }
+                    KbInput {
+                        id: ethGwInput
+                        width: parent.width; keyboard: root.keyboard; placeholder: "192.168.10.1"
+                        onTextChanged: root.ethGw = text
+                        onActiveFocusChanged: if (activeFocus)
+                            Qt.callLater(function() { ethView.scrollTo(ethGwInput) })
+                    }
                     Text { text: "DNS"; color: "#94a3b8"; font.pixelSize: 10 }
-                    KbInput { width: parent.width; keyboard: root.keyboard; placeholder: "8.8.8.8"
-                              onTextChanged: root.ethDns = text }
+                    KbInput {
+                        id: ethDnsInput
+                        width: parent.width; keyboard: root.keyboard; placeholder: "8.8.8.8"
+                        onTextChanged: root.ethDns = text
+                        onActiveFocusChanged: if (activeFocus)
+                            Qt.callLater(function() { ethView.scrollTo(ethDnsInput) })
+                    }
                 }
 
                 Item { width: 1; height: 4 }
