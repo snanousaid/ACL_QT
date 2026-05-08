@@ -109,11 +109,10 @@ Rectangle {
         id: card
         anchors.centerIn: parent
         width:  parent.width  - 24
-        height: Qt.inputMethod.visible
-                ? Math.min(parent.height - 40,
-                           parent.height - Qt.inputMethod.keyboardRectangle.height - 24)
-                : parent.height - 40
-        Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        // Hauteur fixe (ne se redimensionne PAS quand clavier ouvre).
+        // La carte reste centree, le clavier overlay le bas, le Flickable
+        // interne gere le scroll vers les champs focus.
+        height: parent.height - 40
         radius: 20
         color: "#0f172a"
         border.color: "#334155"
@@ -169,7 +168,10 @@ Rectangle {
             }
             CloseIcon {
                 anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                onClicked: root.close()
+                onClicked: {
+                    console.log("[NetworkConfigModal] CloseIcon clicked → close()")
+                    root.close()
+                }
             }
             Rectangle { anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
                         height: 1; color: "#1e293b" }
@@ -507,16 +509,14 @@ Rectangle {
                     spacing: 10
 
 
-                    // ── Liste WiFi : taille adaptive ─────────────────────────
-                    // Tres compacte (56px = 1 item) quand SSID selectionne :
-                    // affiche seulement le SSID choisi, libere place pour le form.
-                    // Sinon : jusqu'a 4 items visibles.
+                    // ── Liste WiFi : hauteur fixe 4 items max ────────────────
+                    // Pas de shrink quand SSID selectionne -> user voit toujours
+                    // toute la liste. Pour acceder au form en bas, scroll dans
+                    // le Flickable global ou drag dans la liste.
                     Rectangle {
                         id: wifiListBox
                         width: parent.width
-                        height: root.wifiSelectedSsid !== ""
-                                ? 56
-                                : Math.min(4 * 50 + 8, Math.max(1, root.wifiList.length) * 50 + 8)
+                        height: Math.min(4 * 50 + 8, Math.max(1, root.wifiList.length) * 50 + 8)
                         Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                         radius: 10
                         color: "#0b1220"; border.color: "#1e293b"
@@ -1149,23 +1149,13 @@ Rectangle {
             }
         }
 
-        // ─── Footer ─────────────────────────────────────────────────────────
-        Rectangle {
+        // ─── Footer (vide, juste pour l'ancre des Flickable) ────────────────
+        // Le bouton 'Fermer' a ete supprime au profit du X header (eviter
+        // double mecanisme de fermeture).
+        Item {
             id: footer
             anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-            height: 52
-            color: "transparent"
-
-            Rectangle { anchors { top: parent.top; left: parent.left; right: parent.right }
-                        height: 1; color: "#1e293b" }
-
-            AppButton {
-                anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                width: 100; height: 34
-                variant: "secondary"
-                text: "Fermer"; fontSize: 12; bold: false
-                onClicked: root.close()
-            }
+            height: 12  // marge basse seulement
         }
     }
 }
