@@ -18,6 +18,7 @@ Rectangle {
     property string errorMsg: ""
     property string statusMsg: ""
     property bool busy: false
+    property bool scanning: false   // true seulement pendant scanWifi (distinct de busy)
 
     // Wi-Fi form
     property string wifiSelectedSsid: ""
@@ -45,7 +46,7 @@ Rectangle {
     function open() {
         visible = true
         tab = "info"
-        errorMsg = ""; statusMsg = ""; busy = false
+        errorMsg = ""; statusMsg = ""; busy = false; scanning = false
         wifiSelectedSsid = ""; wifiSelectedSecurity = ""; wifiSelectedSignal = 0; wifiPassword = ""
         if (controller) controller.getNetworkInfo()
     }
@@ -75,12 +76,18 @@ Rectangle {
         onWifiNetworksLoaded: {
             root.wifiList = networks
             root.busy = false
+            root.scanning = false
         }
         onWifiConnectResult: {
             root.busy = false
             if (ok) {
                 root.statusMsg = "Wi-Fi connecté."
                 root.wifiSelectedSsid = ""
+                root.wifiSelectedSecurity = ""
+                root.wifiSelectedSignal = 0
+                root.wifiPassword = ""
+                if (typeof wifiPwInput !== "undefined") wifiPwInput.text = ""
+                statusAutoHide.restart()    // disparait apres 5s
                 if (root.controller) root.controller.getNetworkInfo()
             } else {
                 root.errorMsg = "Connexion Wi-Fi : " + msg
@@ -90,6 +97,7 @@ Rectangle {
             root.busy = false
             if (ok) {
                 root.statusMsg = "Ethernet configuré."
+                statusAutoHide.restart()
                 if (root.controller) root.controller.getNetworkInfo()
             } else {
                 root.errorMsg = "Ethernet : " + msg
@@ -97,8 +105,16 @@ Rectangle {
         }
         onNetworkApiError: {
             root.busy = false
+            root.scanning = false
             root.errorMsg = op + ": " + msg
         }
+    }
+
+    // Auto-hide du statusMsg de succes apres 5s
+    Timer {
+        id: statusAutoHide
+        interval: 5000
+        onTriggered: root.statusMsg = ""
     }
 
     // Backdrop : absorbe les taps → ne ferme pas le modal sur tap arrière-plan
@@ -273,6 +289,7 @@ Rectangle {
                         root.errorMsg = ""; root.statusMsg = ""
                         if (modelData.id === "wifi" && root.wifiList.length === 0) {
                             root.busy = true
+                            root.scanning = true
                             root.controller.scanWifi()
                         }
                     }
@@ -454,19 +471,19 @@ Rectangle {
                     width: 96; height: 28
                     variant: "secondary"
                     enabled: !root.busy
-                    text: root.busy ? "Scan…" : "Scanner"
+                    text: root.scanning ? "Scan…" : "Scanner"
                     fontSize: 11; bold: false
                     onClicked: {
-                        console.log("[scanBtn] clicked → scanWifi()")
                         root.errorMsg = ""; root.statusMsg = ""
                         root.busy = true
+                        root.scanning = true
                         root.controller.scanWifi()
                     }
                     contentItem: Row {
                         anchors.centerIn: parent
                         spacing: 6
                         Spinner {
-                            visible: root.busy
+                            visible: root.scanning
                             anchors.verticalCenter: parent.verticalCenter
                             size: 12
                             color: "#cbd5e1"
@@ -524,15 +541,15 @@ Rectangle {
 
                         Text {
                             anchors.centerIn: parent
-                            visible: root.wifiList.length === 0 && !root.busy
+                            visible: root.wifiList.length === 0 && !root.scanning
                             text: "Aucun réseau"
                             color: "#64748b"; font.pixelSize: 11
                         }
 
-                        // Indicateur "scan en cours" centre dans la liste
+                        // Indicateur "scan en cours" centre dans la liste (que si scanning)
                         Row {
                             anchors.centerIn: parent
-                            visible: root.busy && root.wifiList.length === 0
+                            visible: root.scanning && root.wifiList.length === 0
                             spacing: 8
                             Spinner { size: 14; color: "#60a5fa"; anchors.verticalCenter: parent.verticalCenter }
                             Text {
@@ -544,7 +561,7 @@ Rectangle {
 
                         // Bandeau scan en cours en haut de liste si on a deja des items
                         Rectangle {
-                            visible: root.busy && root.wifiList.length > 0
+                            visible: root.scanning && root.wifiList.length > 0
                             anchors { top: parent.top; left: parent.left; right: parent.right; margins: 4 }
                             height: 22; radius: 6
                             color: "#0c2a3a"
@@ -570,23 +587,24 @@ Rectangle {
                             boundsBehavior: Flickable.StopAtBounds
 
                             // ScrollBar built-in QtQuick.Controls 2.5 - always visible
-                            // Visuel fin 7px, mais zone tactile elargie a 18px via padding
-                            // -> facile a cliquer/drag, esthetique discrete
+                            // Handle visuel 12px + zone tactile 22px (padding 5)
                             ScrollBar.vertical: ScrollBar {
                                 id: wifiVbar
                                 active: true
                                 policy: ScrollBar.AlwaysOn
-                                width: 18
-                                padding: 5.5   // 18 - 7 = 11 / 2 = 5.5 -> handle visuel 7px centre
+                                width: 22
+                                padding: 5
+                                minimumSize: 0.20  // handle min 20% de la hauteur (visible)
                                 contentItem: Rectangle {
-                                    implicitWidth: 7
-                                    radius: 3.5
+                                    implicitWidth: 12
+                                    radius: 6
                                     color: wifiVbar.pressed ? "#60a5fa"
                                                             : (wifiVbar.hovered ? "#64748b" : "#475569")
                                     Behavior on color { ColorAnimation { duration: 100 } }
                                 }
                                 background: Rectangle {
-                                    color: "transparent"
+                                    color: "#0b1220"
+                                    radius: 6
                                 }
                             }
 
@@ -955,12 +973,20 @@ Rectangle {
                 id: connectBtn
                 anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
                 height: 46
-                // Variant vert si deja connecte (info), bleu sinon
-                variant: root.wifiAlreadyConnected ? "success" : "primary"
-                // Disabled si deja connecte ou rien selectionne ou busy
-                enabled: root.wifiSelectedSsid !== "" && !root.busy && !root.wifiAlreadyConnected
+                // Cas particulier : si deja connecte mais user veut changer
+                // pour IP STATIQUE -> autoriser (mise a jour de la config IP)
+                readonly property bool canApplyStaticUpdate: root.wifiAlreadyConnected
+                                                         && root.wifiMode === "static"
+
+                // Variant : vert si deja connecte DHCP, primary sinon
+                variant: root.wifiAlreadyConnected && !canApplyStaticUpdate ? "success" : "primary"
+                // Enabled : si SSID + pas busy + (pas deja connecte OU on change vers static)
+                enabled: root.wifiSelectedSsid !== "" && !root.busy
+                         && (!root.wifiAlreadyConnected || canApplyStaticUpdate)
                 text: root.busy ? "Connexion…"
-                                : (root.wifiAlreadyConnected ? "Déjà connecté" : "Se connecter")
+                    : root.wifiAlreadyConnected
+                        ? (canApplyStaticUpdate ? "Mettre à jour" : "Déjà connecté")
+                        : "Se connecter"
                 onClicked: {
                     root.errorMsg = ""; root.statusMsg = ""; root.busy = true
                     if (root.keyboard) root.keyboard.close()
@@ -976,9 +1002,9 @@ Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         size: 18; color: "#cbd5e1"
                     }
-                    // Checkmark si deja connecte
+                    // Checkmark si deja connecte (pas en mode "Mettre a jour")
                     Text {
-                        visible: root.wifiAlreadyConnected && !root.busy
+                        visible: root.wifiAlreadyConnected && !root.busy && !connectBtn.canApplyStaticUpdate
                         anchors.verticalCenter: parent.verticalCenter
                         text: "✓"; color: "white"; font.pixelSize: 16; font.weight: Font.Bold
                     }
