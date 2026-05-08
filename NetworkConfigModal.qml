@@ -22,7 +22,11 @@ Rectangle {
     // Wi-Fi form
     property string wifiSelectedSsid: ""
     property string wifiSelectedSecurity: ""
+    property int    wifiSelectedSignal: 0
     property string wifiPassword: ""
+    // True si le SSID selectionne est deja le SSID actuellement connecte
+    readonly property bool wifiAlreadyConnected: wifiSelectedSsid !== ""
+                                              && root.info.wifiSsid === wifiSelectedSsid
     property string wifiMode: "dhcp"
     property string wifiIp: ""
     property string wifiPrefix: "24"
@@ -42,7 +46,7 @@ Rectangle {
         visible = true
         tab = "info"
         errorMsg = ""; statusMsg = ""; busy = false
-        wifiSelectedSsid = ""; wifiSelectedSecurity = ""; wifiPassword = ""
+        wifiSelectedSsid = ""; wifiSelectedSecurity = ""; wifiSelectedSignal = 0; wifiPassword = ""
         if (controller) controller.getNetworkInfo()
     }
     function close() {
@@ -647,6 +651,7 @@ Rectangle {
                                 onClicked: {
                                     root.wifiSelectedSsid = modelData.ssid
                                     root.wifiSelectedSecurity = modelData.security || ""
+                                    root.wifiSelectedSignal = modelData.signal || 0
                                     root.wifiPassword = ""
                                     if (typeof wifiPwInput !== "undefined") wifiPwInput.text = ""
                                 }
@@ -662,56 +667,105 @@ Rectangle {
                         opacity: root.wifiSelectedSsid === "" ? 0.4 : 1
                         Behavior on opacity { NumberAnimation { duration: 180 } }
 
-                        // Card SSID sélectionné avec X pour deselect
+                        // Card SSID sélectionné enrichie : icone + nom + signal % + badge securite + bouton deselect
                         Column {
                             width: parent.width
                             spacing: 4
                             Text { text: "SSID sélectionné"; color: "#94a3b8"; font.pixelSize: 10 }
                             Rectangle {
-                                width: parent.width; height: 38; radius: 8
-                                color: "#1e293b"; border.color: "#334155"
-                                Row {
+                                width: parent.width; height: 44; radius: 8
+                                color: "#1e293b"
+                                border.color: root.wifiAlreadyConnected ? "#22c55e" : "#334155"
+                                border.width: 1
+                                Behavior on border.color { ColorAnimation { duration: 200 } }
+
+                                // Icone WiFi (signal arcs colores selon force)
+                                Canvas {
+                                    id: ssidCardIcon
                                     anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
-                                    spacing: 8
-                                    Canvas {
-                                        width: 14; height: 12
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        onPaint: {
-                                            var ctx = getContext("2d")
-                                            ctx.clearRect(0, 0, width, height)
-                                            ctx.strokeStyle = "#60a5fa"; ctx.fillStyle = "#60a5fa"
-                                            ctx.lineWidth = 1.5
-                                            var cx = width/2, cy = height*0.9
-                                            ctx.beginPath(); ctx.arc(cx, cy, width*0.45, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
-                                            ctx.beginPath(); ctx.arc(cx, cy, width*0.28, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
-                                            ctx.beginPath(); ctx.arc(cx, cy, 1.4, 0, Math.PI*2); ctx.fill()
-                                        }
-                                    }
-                                    Text {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        text: root.wifiSelectedSsid !== "" ? root.wifiSelectedSsid : "—"
-                                        color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold
+                                    width: 18; height: 14
+                                    property int sig: root.wifiSelectedSignal
+                                    onSigChanged: requestPaint()
+                                    Component.onCompleted: requestPaint()
+                                    onPaint: {
+                                        var ctx = getContext("2d")
+                                        ctx.clearRect(0, 0, width, height)
+                                        ctx.lineCap = "round"; ctx.lineWidth = 2
+                                        var cx = width/2, cy = height*0.9
+                                        ctx.strokeStyle = sig >= 80 ? "#60a5fa" : "#475569"
+                                        ctx.beginPath(); ctx.arc(cx, cy, width*0.45, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                        ctx.strokeStyle = sig >= 50 ? "#60a5fa" : "#475569"
+                                        ctx.beginPath(); ctx.arc(cx, cy, width*0.30, Math.PI*1.20, Math.PI*1.80); ctx.stroke()
+                                        ctx.strokeStyle = sig >= 20 ? "#60a5fa" : "#475569"
+                                        ctx.fillStyle   = sig >= 20 ? "#60a5fa" : "#475569"
+                                        ctx.beginPath(); ctx.arc(cx, cy, 1.5, 0, Math.PI*2); ctx.fill()
                                     }
                                 }
-                                AppButton {
-                                    id: deselBtn
-                                    visible: root.wifiSelectedSsid !== ""
+
+                                // SSID + sub-line
+                                Column {
+                                    anchors { left: ssidCardIcon.right; leftMargin: 10
+                                              right: ssidCardRight.left; rightMargin: 8
+                                              verticalCenter: parent.verticalCenter }
+                                    spacing: 2
+                                    Text {
+                                        text: root.wifiSelectedSsid !== "" ? root.wifiSelectedSsid : "—"
+                                        color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold
+                                        elide: Text.ElideRight
+                                        width: parent.width
+                                    }
+                                    Text {
+                                        visible: root.wifiSelectedSsid !== ""
+                                        text: root.wifiAlreadyConnected
+                                              ? "Déjà connecté"
+                                              : (root.wifiSelectedSignal + " % • "
+                                                 + (root.wifiSelectedSecurity.length > 0 ? root.wifiSelectedSecurity : "Ouvert"))
+                                        color: root.wifiAlreadyConnected ? "#22c55e" : "#94a3b8"
+                                        font.pixelSize: 9; font.weight: Font.DemiBold
+                                    }
+                                }
+
+                                // Right side : badge security + deselect btn
+                                Row {
+                                    id: ssidCardRight
                                     anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                                    width: 24; height: 24
-                                    text: "×"
-                                    background: Rectangle {
-                                        radius: 12
-                                        color: deselBtn.pressed ? "#334155" : "transparent"
+                                    spacing: 6
+
+                                    // Badge securite (visible meme dans la card)
+                                    Rectangle {
+                                        visible: root.wifiSelectedSecurity.length > 0
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: ssidSecText.implicitWidth + 10; height: 18; radius: 4
+                                        color: "#0f172a"; border.color: "#334155"; border.width: 1
+                                        Text {
+                                            id: ssidSecText
+                                            anchors.centerIn: parent
+                                            text: root.wifiSelectedSecurity
+                                            color: "#cbd5e1"; font.pixelSize: 9; font.weight: Font.DemiBold
+                                        }
                                     }
-                                    contentItem: Text {
-                                        text: deselBtn.text; color: "#94a3b8"
-                                        font.pixelSize: 14; font.weight: Font.Bold
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-                                    onClicked: {
-                                        root.wifiSelectedSsid = ""; root.wifiSelectedSecurity = ""; root.wifiPassword = ""
-                                        if (typeof wifiPwInput !== "undefined") wifiPwInput.text = ""
+
+                                    AppButton {
+                                        id: deselBtn
+                                        visible: root.wifiSelectedSsid !== ""
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: 24; height: 24
+                                        text: "×"
+                                        background: Rectangle {
+                                            radius: 12
+                                            color: deselBtn.pressed ? "#334155" : "transparent"
+                                        }
+                                        contentItem: Text {
+                                            text: deselBtn.text; color: "#94a3b8"
+                                            font.pixelSize: 14; font.weight: Font.Bold
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        onClicked: {
+                                            root.wifiSelectedSsid = ""; root.wifiSelectedSecurity = ""
+                                            root.wifiSelectedSignal = 0; root.wifiPassword = ""
+                                            if (typeof wifiPwInput !== "undefined") wifiPwInput.text = ""
+                                        }
                                     }
                                 }
                             }
@@ -840,9 +894,12 @@ Rectangle {
                 id: connectBtn
                 anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
                 height: 46
-                variant: "primary"
-                enabled: root.wifiSelectedSsid !== "" && !root.busy
-                text: root.busy ? "Connexion…" : "Se connecter"
+                // Variant vert si deja connecte (info), bleu sinon
+                variant: root.wifiAlreadyConnected ? "success" : "primary"
+                // Disabled si deja connecte ou rien selectionne ou busy
+                enabled: root.wifiSelectedSsid !== "" && !root.busy && !root.wifiAlreadyConnected
+                text: root.busy ? "Connexion…"
+                                : (root.wifiAlreadyConnected ? "Déjà connecté" : "Se connecter")
                 onClicked: {
                     root.errorMsg = ""; root.statusMsg = ""; root.busy = true
                     if (root.keyboard) root.keyboard.close()
@@ -857,6 +914,12 @@ Rectangle {
                         visible: root.busy
                         anchors.verticalCenter: parent.verticalCenter
                         size: 18; color: "#cbd5e1"
+                    }
+                    // Checkmark si deja connecte
+                    Text {
+                        visible: root.wifiAlreadyConnected && !root.busy
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "✓"; color: "white"; font.pixelSize: 16; font.weight: Font.Bold
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
