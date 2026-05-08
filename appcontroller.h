@@ -99,8 +99,8 @@ private:
     void handleEvent(const QJsonObject &data, const QString &source);
 
     // ── URLs ────────────────────────────────────────────────────────────────
-    const QString m_badgeSocketUrl = QStringLiteral("http://192.168.10.132:5000");
-    const QString m_controllerUrl  = QStringLiteral("http://192.168.10.132:80/api/v2");
+    const QString m_badgeSocketUrl = QStringLiteral("http://localhost:5000");
+    const QString m_controllerUrl  = QStringLiteral("http://localhost:80/api/v2");
     // mjpegUrl vide = mode C++ (CameraWorker fournit les frames)
     const QString m_mjpegUrl       = QStringLiteral("");
     // ────────────────────────────────────────────────────────────────────────
