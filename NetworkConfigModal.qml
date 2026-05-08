@@ -536,23 +536,23 @@ Rectangle {
                             boundsBehavior: Flickable.StopAtBounds
 
                             // ScrollBar built-in QtQuick.Controls 2.5 - always visible
-                            // Width 18px -> assez large pour drag tactile direct
+                            // Visuel fin 7px, mais zone tactile elargie a 18px via padding
+                            // -> facile a cliquer/drag, esthetique discrete
                             ScrollBar.vertical: ScrollBar {
                                 id: wifiVbar
                                 active: true
                                 policy: ScrollBar.AlwaysOn
                                 width: 18
+                                padding: 5.5   // 18 - 7 = 11 / 2 = 5.5 -> handle visuel 7px centre
                                 contentItem: Rectangle {
-                                    implicitWidth: 18
-                                    radius: 9
+                                    implicitWidth: 7
+                                    radius: 3.5
                                     color: wifiVbar.pressed ? "#60a5fa"
                                                             : (wifiVbar.hovered ? "#64748b" : "#475569")
                                     Behavior on color { ColorAnimation { duration: 100 } }
                                 }
                                 background: Rectangle {
-                                    color: "#0f172a"
-                                    radius: 9
-                                    border.color: "#1e293b"; border.width: 1
+                                    color: "transparent"
                                 }
                             }
 
