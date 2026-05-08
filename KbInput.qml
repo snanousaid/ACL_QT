@@ -29,7 +29,7 @@ Item {
             height: 38
             radius: 8
             color:  "#1e293b"
-            border.color: inputField.activeFocus ? "#3b82f6" : "#475569"
+            border.color: inputField.activeFocus ? "#3b82f6" : "#334155"
             border.width: 1
 
             TextInput {

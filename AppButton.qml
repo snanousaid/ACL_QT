@@ -28,7 +28,7 @@ Button {
     // Schemes par variant
     readonly property var _schemes: ({
         "primary":   { bg: "#2563eb", bgPressed: "#1d4ed8", fg: "white",   border: "#3b82f6", borderW: 0 },
-        "secondary": { bg: "#1e293b", bgPressed: "#0f172a", fg: "#cbd5e1", border: "#475569", borderW: 1 },
+        "secondary": { bg: "#1e293b", bgPressed: "#0f172a", fg: "#cbd5e1", border: "#334155", borderW: 1 },
         "danger":    { bg: "#dc2626", bgPressed: "#7f1d1d", fg: "white",   border: "#7f1d1d", borderW: 0 },
         "success":   { bg: "#16a34a", bgPressed: "#14532d", fg: "white",   border: "#22c55e", borderW: 0 },
         "ghost":     { bg: "transparent", bgPressed: "#1e293b", fg: "#94a3b8", border: "#334155", borderW: 1 }

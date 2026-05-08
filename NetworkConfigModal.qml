@@ -484,20 +484,9 @@ Rectangle {
                     contentY = Math.min(maxY, target)
                 }
 
-                // ScrollBar visible pour indiquer le scroll
-                Rectangle {
-                    visible: wifiFlick.contentHeight > wifiFlick.height
-                    anchors { right: parent.right; rightMargin: 2; top: parent.top; bottom: parent.bottom }
-                    width: 3; radius: 1.5
-                    color: "#1e293b"
-                    Rectangle {
-                        width: parent.width
-                        radius: parent.radius
-                        color: "#475569"
-                        y: wifiFlick.contentY * (parent.height / wifiFlick.contentHeight)
-                        height: wifiFlick.height * (parent.height / wifiFlick.contentHeight)
-                    }
-                }
+                // (Pas de scrollbar globale ici - elle entrait en conflit visuel
+                //  avec la ScrollBar.AlwaysOn de la wifiListView. Le Flickable
+                //  reste scrollable au doigt si contentHeight > height.)
 
                 Column {
                     id: wifiContent
@@ -644,7 +633,7 @@ Rectangle {
                                             visible: !!modelData.security && modelData.security.length > 0
                                             anchors.verticalCenter: parent.verticalCenter
                                             width: secText.implicitWidth + 10; height: 18; radius: 4
-                                            color: "#0f172a"; border.color: "#475569"; border.width: 1
+                                            color: "#0f172a"; border.color: "#334155"; border.width: 1
                                             Text {
                                                 id: secText
                                                 anchors.centerIn: parent
