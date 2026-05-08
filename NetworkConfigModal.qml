@@ -55,6 +55,15 @@ Rectangle {
         closed()
     }
 
+    // Helper : traduit le mode reseau backend (auto/manual/dhcp/static) en libelle FR
+    function modeLabel(mode) {
+        if (!mode) return "—"
+        var m = String(mode).toLowerCase()
+        if (m.indexOf("static") >= 0 || m.indexOf("manual") >= 0) return "Statique"
+        if (m.indexOf("dhcp")   >= 0 || m.indexOf("auto")   >= 0) return "DHCP (auto)"
+        return mode
+    }
+
     Connections {
         target: root.controller
         ignoreUnknownSignals: true
@@ -520,6 +529,38 @@ Rectangle {
                             color: "#64748b"; font.pixelSize: 11
                         }
 
+                        // Indicateur "scan en cours" centre dans la liste
+                        Row {
+                            anchors.centerIn: parent
+                            visible: root.busy && root.wifiList.length === 0
+                            spacing: 8
+                            Spinner { size: 14; color: "#60a5fa"; anchors.verticalCenter: parent.verticalCenter }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Recherche en cours…"
+                                color: "#94a3b8"; font.pixelSize: 11; font.weight: Font.DemiBold
+                            }
+                        }
+
+                        // Bandeau scan en cours en haut de liste si on a deja des items
+                        Rectangle {
+                            visible: root.busy && root.wifiList.length > 0
+                            anchors { top: parent.top; left: parent.left; right: parent.right; margins: 4 }
+                            height: 22; radius: 6
+                            color: "#0c2a3a"
+                            z: 1
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 6
+                                Spinner { size: 10; color: "#60a5fa"; anchors.verticalCenter: parent.verticalCenter }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "Recherche…"
+                                    color: "#60a5fa"; font.pixelSize: 9; font.weight: Font.DemiBold
+                                }
+                            }
+                        }
+
                         ListView {
                             id: wifiListView
                             anchors { fill: parent; margins: 4 }
@@ -749,15 +790,16 @@ Rectangle {
                                         id: deselBtn
                                         visible: root.wifiSelectedSsid !== ""
                                         anchors.verticalCenter: parent.verticalCenter
-                                        width: 24; height: 24
+                                        width: 32; height: 32
                                         text: "×"
                                         background: Rectangle {
-                                            radius: 12
-                                            color: deselBtn.pressed ? "#334155" : "transparent"
+                                            radius: 16
+                                            color: deselBtn.pressed ? "#334155" : "#0f172a"
+                                            border.color: "#334155"; border.width: 1
                                         }
                                         contentItem: Text {
-                                            text: deselBtn.text; color: "#94a3b8"
-                                            font.pixelSize: 14; font.weight: Font.Bold
+                                            text: deselBtn.text; color: "#cbd5e1"
+                                            font.pixelSize: 18; font.weight: Font.Bold
                                             horizontalAlignment: Text.AlignHCenter
                                             verticalAlignment: Text.AlignVCenter
                                         }
@@ -817,24 +859,43 @@ Rectangle {
                             }
                         }
 
-                        // Helper text Mode actuel (DHCP)
-                        Row {
+                        // Helper box DHCP (info IP attribuee auto)
+                        Rectangle {
                             visible: root.wifiMode === "dhcp"
-                            spacing: 6
-                            Rectangle {
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 6; height: 6; radius: 3
-                                color: "#22c55e"
+                            width: parent.width; height: 38; radius: 8
+                            color: "#1e293b"; border.color: "#334155"; border.width: 1
+                            Row {
+                                anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                                spacing: 6
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 6; height: 6; radius: 3
+                                    color: "#22c55e"
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "Mode actuel : "
+                                    color: "#94a3b8"; font.pixelSize: 10
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: root.modeLabel(root.info.wifiMode)
+                                    color: "white"; font.pixelSize: 10; font.weight: Font.DemiBold
+                                }
                             }
+                        }
+
+                        // Helper box IP STATIQUE (instructions)
+                        Rectangle {
+                            visible: root.wifiMode === "static"
+                            width: parent.width; height: 38; radius: 8
+                            color: "#1e293b"; border.color: "#334155"; border.width: 1
                             Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: "Mode actuel : "
+                                anchors { fill: parent; margins: 10 }
+                                verticalAlignment: Text.AlignVCenter
+                                text: "Configurez manuellement IP, préfixe, passerelle et DNS."
                                 color: "#94a3b8"; font.pixelSize: 10
-                            }
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: root.info.wifiMode || "DHCP (auto)"
-                                color: "white"; font.pixelSize: 10; font.weight: Font.DemiBold
+                                wrapMode: Text.WordWrap
                             }
                         }
 
