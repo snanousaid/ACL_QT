@@ -284,7 +284,9 @@ static QByteArray jsonBody(const QJsonObject &o)
 }
 
 // Extrait le message d'erreur de la reponse REST :
-//   1. Tente de parser le body JSON et chercher error/message/detail/msg
+//   1. Tente de parser le body JSON et chercher message/detail/msg/errorMessage/error
+//      (priorite a 'message' car NestJS BadRequestException l'utilise pour
+//       le texte explicite, alors que 'error' contient juste 'Bad Request')
 //   2. Si pas de JSON utile : utilise reply->errorString() + statut HTTP
 static QString extractErrorMsg(QNetworkReply *reply, const QByteArray &body)
 {
@@ -292,9 +294,10 @@ static QString extractErrorMsg(QNetworkReply *reply, const QByteArray &body)
     QJsonDocument doc = QJsonDocument::fromJson(body);
     if (doc.isObject()) {
         const QJsonObject obj = doc.object();
-        const QStringList keys = { QStringLiteral("error"),  QStringLiteral("message"),
-                                   QStringLiteral("detail"), QStringLiteral("msg"),
-                                   QStringLiteral("errorMessage") };
+        // Ordre prioritaire : message (NestJS body explicite) > detail > msg > error (categorie)
+        const QStringList keys = { QStringLiteral("message"),      QStringLiteral("detail"),
+                                   QStringLiteral("msg"),          QStringLiteral("errorMessage"),
+                                   QStringLiteral("error") };
         for (const QString &k : keys) {
             const QString v = obj.value(k).toString().trimmed();
             if (!v.isEmpty()) return v;
