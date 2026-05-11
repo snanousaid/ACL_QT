@@ -184,10 +184,7 @@ Rectangle {
             }
             CloseIcon {
                 anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                onClicked: {
-                    console.log("[NetworkConfigModal] CloseIcon clicked → close()")
-                    root.close()
-                }
+                onClicked: root.close()
             }
             Rectangle { anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
                         height: 1; color: "#1e293b" }
