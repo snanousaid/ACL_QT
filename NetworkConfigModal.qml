@@ -87,21 +87,23 @@ Rectangle {
                 root.wifiSelectedSignal = 0
                 root.wifiPassword = ""
                 if (typeof wifiPwInput !== "undefined") wifiPwInput.text = ""
-                statusAutoHide.restart()    // disparait apres 5s
-                if (root.controller) root.controller.getNetworkInfo()
+                statusAutoHide.restart()
             } else {
                 root.errorMsg = "Connexion Wi-Fi : " + msg
             }
+            // Refresh info dans LES DEUX CAS : succes ET echec
+            // (apres echec, le device peut etre deconnecte du reseau precedent)
+            if (root.controller) root.controller.getNetworkInfo()
         }
         onEthernetResult: {
             root.busy = false
             if (ok) {
                 root.statusMsg = "Ethernet configuré."
                 statusAutoHide.restart()
-                if (root.controller) root.controller.getNetworkInfo()
             } else {
                 root.errorMsg = "Ethernet : " + msg
             }
+            if (root.controller) root.controller.getNetworkInfo()
         }
         onNetworkApiError: {
             root.busy = false
@@ -1063,23 +1065,32 @@ Rectangle {
                     }
                 }
 
-                // 2 gros boutons DHCP / IP STATIQUE
+                // 2 gros boutons DHCP / IP STATIQUE (AppButton pour fiabilite tactile)
                 Row {
                     width: parent.width; spacing: 8
                     Repeater {
                         model: [{id:"dhcp", lbl:"DHCP (AUTO)"}, {id:"static", lbl:"IP STATIQUE"}]
-                        Rectangle {
-                            width: (parent.width - 8) / 2; height: 40; radius: 8
-                            color: root.ethMode === modelData.id ? "#2563eb" : "#1e293b"
-                            border.color: root.ethMode === modelData.id ? "#3b82f6" : "#334155"
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                            Text {
-                                anchors.centerIn: parent
+                        AppButton {
+                            id: ethModeBtn
+                            width: (parent.width - 8) / 2; height: 40
+                            text: modelData.lbl
+                            fontSize: 11
+                            background: Rectangle {
+                                radius: 8
+                                color: root.ethMode === modelData.id ? "#2563eb"
+                                        : (ethModeBtn.pressed ? "#0f172a" : "#1e293b")
+                                border.color: root.ethMode === modelData.id ? "#3b82f6" : "#334155"
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                            }
+                            contentItem: Text {
                                 text: modelData.lbl
                                 color: root.ethMode === modelData.id ? "white" : "#94a3b8"
                                 font.pixelSize: 11; font.weight: Font.Bold
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
                             }
-                            MouseArea { anchors.fill: parent; onClicked: root.ethMode = modelData.id }
+                            onClicked: root.ethMode = modelData.id
                         }
                     }
                 }
