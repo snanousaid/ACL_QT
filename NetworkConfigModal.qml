@@ -385,7 +385,7 @@ Rectangle {
                     leftPadding: 4; topPadding: 8
                 }
 
-                // Wi-Fi interface (avec IP en valeur principale + badge IPv4)
+                // Wi-Fi interface (avec IP en valeur principale + mode en sous-ligne)
                 InfoCard {
                     width: parent.width
                     iconType: "wifi"; iconColor: "#60a5fa"
@@ -397,6 +397,10 @@ Rectangle {
                                 ? "#22c55e" : "#f87171"
                     valueMono: true
                     badge: (root.info.wifiIp && root.info.wifiIp.length > 0) ? "IPv4" : ""
+                    // Mode de connexion (DHCP / Statique) sous l'IP
+                    subValue: (root.info.wifiIp && root.info.wifiIp.length > 0)
+                              ? "Mode : " + root.modeLabel(root.info.wifiMode)
+                              : ""
                 }
 
                 // SSID actuel (si connecté)
@@ -424,7 +428,7 @@ Rectangle {
                     leftPadding: 4; topPadding: 8
                 }
 
-                // Ethernet interface
+                // Ethernet interface (avec mode en sous-ligne)
                 InfoCard {
                     width: parent.width
                     iconType: "ethernet"; iconColor: "#22c55e"
@@ -436,6 +440,9 @@ Rectangle {
                                 ? "#22c55e" : "#f87171"
                     valueMono: true
                     badge: (root.info.ethIp && root.info.ethIp.length > 0) ? "IPv4" : ""
+                    subValue: (root.info.ethIp && root.info.ethIp.length > 0)
+                              ? "Mode : " + root.modeLabel(root.info.ethMode)
+                              : ""
                 }
 
                 // MAC Ethernet (si dispo)

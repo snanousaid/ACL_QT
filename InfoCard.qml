@@ -5,7 +5,8 @@ import QtQuick 2.10
 //                    valueColor: "#22c55e"; valueMono: true; badge: "IPv4" }
 Rectangle {
     id: root
-    height: 58
+    height: subValue.length > 0 ? 64 : 58
+    Behavior on height { NumberAnimation { duration: 120 } }
     radius: 12
     color: "#1e293b"
     border.color: "#334155"
@@ -17,6 +18,8 @@ Rectangle {
     property string value:      ""
     property color  valueColor: "white"
     property bool   valueMono:  false
+    property string subValue:   ""        // sous-ligne optionnelle (ex: mode "DHCP (auto)")
+    property color  subValueColor: "#94a3b8"
     property string badge:      ""        // ex: "IPv4", "IPv6", ""
     property string badgeColor: "#1e293b"
 
@@ -105,6 +108,13 @@ Rectangle {
                 font.pixelSize: 14
                 font.weight: Font.DemiBold
                 font.family: root.valueMono ? "monospace" : "Sans"
+            }
+            Text {
+                visible: root.subValue.length > 0
+                text: root.subValue
+                color: root.subValueColor
+                font.pixelSize: 10
+                font.weight: Font.DemiBold
             }
         }
     }
