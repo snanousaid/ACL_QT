@@ -283,12 +283,13 @@ void AppController::getNetworkInfo()
     QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/network/info")));
     QNetworkReply *reply = m_nam->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        const QByteArray body = reply->readAll();
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
-            emit networkApiError(QStringLiteral("info"), reply->errorString());
+            emit networkApiError(QStringLiteral("info"), extractErrorMsg(reply, body));
             return;
         }
-        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
         if (!doc.isObject()) {
             emit networkApiError(QStringLiteral("info"), QStringLiteral("Réponse invalide"));
             return;
@@ -316,12 +317,13 @@ void AppController::scanWifi()
     QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/network/scan")));
     QNetworkReply *reply = m_nam->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        const QByteArray body = reply->readAll();
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
-            emit networkApiError(QStringLiteral("scan"), reply->errorString());
+            emit networkApiError(QStringLiteral("scan"), extractErrorMsg(reply, body));
             return;
         }
-        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
         if (!doc.isArray()) {
             emit networkApiError(QStringLiteral("scan"), QStringLiteral("Réponse invalide"));
             return;
@@ -336,6 +338,34 @@ void AppController::scanWifi()
 static QByteArray jsonBody(const QJsonObject &o)
 {
     return QJsonDocument(o).toJson(QJsonDocument::Compact);
+}
+
+// Extrait le message d'erreur de la reponse REST :
+//   1. Tente de parser le body JSON et chercher error/message/detail/msg
+//   2. Si pas de JSON utile : utilise reply->errorString() + statut HTTP
+static QString extractErrorMsg(QNetworkReply *reply, const QByteArray &body)
+{
+    // Essai JSON
+    QJsonDocument doc = QJsonDocument::fromJson(body);
+    if (doc.isObject()) {
+        const QJsonObject obj = doc.object();
+        const QStringList keys = { QStringLiteral("error"),  QStringLiteral("message"),
+                                   QStringLiteral("detail"), QStringLiteral("msg"),
+                                   QStringLiteral("errorMessage") };
+        for (const QString &k : keys) {
+            const QString v = obj.value(k).toString().trimmed();
+            if (!v.isEmpty()) return v;
+        }
+    }
+    // Fallback : Qt error string + code HTTP
+    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    QString s = reply->errorString();
+    if (httpStatus > 0) s = QStringLiteral("HTTP %1 — %2").arg(httpStatus).arg(s);
+    // Si body texte court non vide, on l'ajoute
+    const QString bodyStr = QString::fromUtf8(body).trimmed();
+    if (!bodyStr.isEmpty() && bodyStr.length() < 200)
+        s += QStringLiteral(" — ") + bodyStr;
+    return s;
 }
 
 void AppController::connectWifi(const QString &ssid, const QString &password,
@@ -359,10 +389,25 @@ void AppController::connectWifi(const QString &ssid, const QString &password,
     req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     QNetworkReply *reply = m_nam->post(req, jsonBody(body));
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        const QByteArray body = reply->readAll();
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
-            emit wifiConnectResult(false, reply->errorString());
+            const QString msg = extractErrorMsg(reply, body);
+            qDebug() << "[connectWifi] FAILED:" << msg;
+            emit wifiConnectResult(false, msg);
             return;
+        }
+        // Cas 2xx mais payload qui contient { success: false, error: ... }
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        if (doc.isObject()) {
+            const QJsonObject obj = doc.object();
+            // Detection echec applicatif (success=false ou ok=false)
+            const bool appOk = obj.value(QStringLiteral("success")).toBool(true)
+                            && obj.value(QStringLiteral("ok")).toBool(true);
+            if (!appOk) {
+                emit wifiConnectResult(false, extractErrorMsg(reply, body));
+                return;
+            }
         }
         emit wifiConnectResult(true, QStringLiteral("Connecté."));
     });
@@ -386,10 +431,23 @@ void AppController::setEthernet(const QString &mode,
     req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     QNetworkReply *reply = m_nam->post(req, jsonBody(body));
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        const QByteArray body = reply->readAll();
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
-            emit ethernetResult(false, reply->errorString());
+            const QString msg = extractErrorMsg(reply, body);
+            qDebug() << "[setEthernet] FAILED:" << msg;
+            emit ethernetResult(false, msg);
             return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        if (doc.isObject()) {
+            const QJsonObject obj = doc.object();
+            const bool appOk = obj.value(QStringLiteral("success")).toBool(true)
+                            && obj.value(QStringLiteral("ok")).toBool(true);
+            if (!appOk) {
+                emit ethernetResult(false, extractErrorMsg(reply, body));
+                return;
+            }
         }
         emit ethernetResult(true, QStringLiteral("Configuration appliquée."));
     });

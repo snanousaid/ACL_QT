@@ -116,6 +116,13 @@ Rectangle {
         interval: 5000
         onTriggered: root.statusMsg = ""
     }
+    // Auto-hide du errorMsg apres 8s (laisse le temps de lire)
+    Timer {
+        id: errorAutoHide
+        interval: 8000
+        onTriggered: root.errorMsg = ""
+    }
+    onErrorMsgChanged: if (errorMsg.length > 0) errorAutoHide.restart()
 
     // Backdrop : absorbe les taps → ne ferme pas le modal sur tap arrière-plan
     MouseArea { anchors.fill: parent; onClicked: {} }
