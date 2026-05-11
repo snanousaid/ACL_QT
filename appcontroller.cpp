@@ -319,6 +319,8 @@ void AppController::getNetworkInfo()
     QNetworkReply *reply = m_nam->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
         const QByteArray body = reply->readAll();
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        qDebug().noquote() << "[getNetworkInfo] HTTP" << http << "body:" << QString::fromUtf8(body);
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
             emit networkApiError(QStringLiteral("info"), extractErrorMsg(reply, body));
@@ -353,6 +355,9 @@ void AppController::scanWifi()
     QNetworkReply *reply = m_nam->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
         const QByteArray body = reply->readAll();
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        qDebug().noquote() << "[scanWifi] HTTP" << http << "body:"
+                           << QString::fromUtf8(body).left(500);
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
             emit networkApiError(QStringLiteral("scan"), extractErrorMsg(reply, body));
@@ -392,6 +397,8 @@ void AppController::connectWifi(const QString &ssid, const QString &password,
     QNetworkReply *reply = m_nam->post(req, jsonBody(body));
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
         const QByteArray body = reply->readAll();
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        qDebug().noquote() << "[connectWifi] HTTP" << http << "body:" << QString::fromUtf8(body);
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
             const QString msg = extractErrorMsg(reply, body);
@@ -434,6 +441,8 @@ void AppController::setEthernet(const QString &mode,
     QNetworkReply *reply = m_nam->post(req, jsonBody(body));
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
         const QByteArray body = reply->readAll();
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        qDebug().noquote() << "[setEthernet] HTTP" << http << "body:" << QString::fromUtf8(body);
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
             const QString msg = extractErrorMsg(reply, body);
