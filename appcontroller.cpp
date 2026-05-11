@@ -276,6 +276,41 @@ void AppController::pollEnrollStatus()
         emit enrollStatus(m_lastEnrollStatus);
 }
 
+// ── Helpers REST ──────────────────────────────────────────────────────────────
+
+static QByteArray jsonBody(const QJsonObject &o)
+{
+    return QJsonDocument(o).toJson(QJsonDocument::Compact);
+}
+
+// Extrait le message d'erreur de la reponse REST :
+//   1. Tente de parser le body JSON et chercher error/message/detail/msg
+//   2. Si pas de JSON utile : utilise reply->errorString() + statut HTTP
+static QString extractErrorMsg(QNetworkReply *reply, const QByteArray &body)
+{
+    // Essai JSON
+    QJsonDocument doc = QJsonDocument::fromJson(body);
+    if (doc.isObject()) {
+        const QJsonObject obj = doc.object();
+        const QStringList keys = { QStringLiteral("error"),  QStringLiteral("message"),
+                                   QStringLiteral("detail"), QStringLiteral("msg"),
+                                   QStringLiteral("errorMessage") };
+        for (const QString &k : keys) {
+            const QString v = obj.value(k).toString().trimmed();
+            if (!v.isEmpty()) return v;
+        }
+    }
+    // Fallback : Qt error string + code HTTP
+    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    QString s = reply->errorString();
+    if (httpStatus > 0) s = QStringLiteral("HTTP %1 — %2").arg(httpStatus).arg(s);
+    // Si body texte court non vide, on l'ajoute
+    const QString bodyStr = QString::fromUtf8(body).trimmed();
+    if (!bodyStr.isEmpty() && bodyStr.length() < 200)
+        s += QStringLiteral(" — ") + bodyStr;
+    return s;
+}
+
 // ── Config réseau (REST → m_controllerUrl) ────────────────────────────────────
 
 void AppController::getNetworkInfo()
@@ -333,39 +368,6 @@ void AppController::scanWifi()
             nets.append(v.toObject().toVariantMap());
         emit wifiNetworksLoaded(nets);
     });
-}
-
-static QByteArray jsonBody(const QJsonObject &o)
-{
-    return QJsonDocument(o).toJson(QJsonDocument::Compact);
-}
-
-// Extrait le message d'erreur de la reponse REST :
-//   1. Tente de parser le body JSON et chercher error/message/detail/msg
-//   2. Si pas de JSON utile : utilise reply->errorString() + statut HTTP
-static QString extractErrorMsg(QNetworkReply *reply, const QByteArray &body)
-{
-    // Essai JSON
-    QJsonDocument doc = QJsonDocument::fromJson(body);
-    if (doc.isObject()) {
-        const QJsonObject obj = doc.object();
-        const QStringList keys = { QStringLiteral("error"),  QStringLiteral("message"),
-                                   QStringLiteral("detail"), QStringLiteral("msg"),
-                                   QStringLiteral("errorMessage") };
-        for (const QString &k : keys) {
-            const QString v = obj.value(k).toString().trimmed();
-            if (!v.isEmpty()) return v;
-        }
-    }
-    // Fallback : Qt error string + code HTTP
-    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    QString s = reply->errorString();
-    if (httpStatus > 0) s = QStringLiteral("HTTP %1 — %2").arg(httpStatus).arg(s);
-    // Si body texte court non vide, on l'ajoute
-    const QString bodyStr = QString::fromUtf8(body).trimmed();
-    if (!bodyStr.isEmpty() && bodyStr.length() < 200)
-        s += QStringLiteral(" — ") + bodyStr;
-    return s;
 }
 
 void AppController::connectWifi(const QString &ssid, const QString &password,
