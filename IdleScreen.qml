@@ -84,24 +84,6 @@ Item {
         opacity: 0.25
     }
 
-    // ── Grille tech (40×40 px, 15% opacité) ─────────────────────────────────
-    Canvas {
-        anchors.fill: parent
-        opacity: 0.15
-        Component.onCompleted: requestPaint()
-        onPaint: {
-            var ctx  = getContext("2d")
-            var step = 40
-            ctx.clearRect(0, 0, width, height)
-            ctx.strokeStyle = "#ffffff"
-            ctx.lineWidth   = 0.6
-            ctx.beginPath()
-            for (var x = 0; x <= width;  x += step) { ctx.moveTo(x, 0);    ctx.lineTo(x, height) }
-            for (var y = 0; y <= height; y += step) { ctx.moveTo(0, y);    ctx.lineTo(width, y)  }
-            ctx.stroke()
-        }
-    }
-
     // ── Carte titre ──────────────────────────────────────────────────────────
     Rectangle {
         id: titleCard
