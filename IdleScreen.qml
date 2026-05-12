@@ -212,6 +212,7 @@ Item {
         }
 
         Rectangle {
+            id: roiFill
             anchors.fill: parent
             color:   roiFrame.c
             opacity: 0
@@ -221,6 +222,10 @@ Item {
                 running: root._roiState === "granted" || root._roiState === "denied"
                 NumberAnimation { from: 0.04; to: 0.28; duration: 700; easing.type: Easing.InOutSine }
                 NumberAnimation { from: 0.28; to: 0.04; duration: 700; easing.type: Easing.InOutSine }
+                // Reset opacity a 0 quand l'animation s'arrete (sinon la surface
+                // reste teintee avec la couleur courante de roiFrame.c -> bleu cyan
+                // apparait apres granted quand le state revient a 'in').
+                onRunningChanged: if (!running) roiFill.opacity = 0
             }
         }
     }
