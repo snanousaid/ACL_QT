@@ -374,12 +374,18 @@ void FaceWorker::run()
     constexpr qint64  SFACE_COOLDOWN_MS   = 2000;
     constexpr int     SFACE_BBOX_TOL_PX   = 40;
     constexpr float   DETECT_SCALE        = 0.5f;
+    // Apres un event d'acces, on freeze toute detection pendant 5s :
+    // - evite spam events sur visage stable
+    // - economise CPU pendant que l'AccessCard est affichee
+    constexpr qint64  EVENT_FREEZE_MS     = 5000;
+    // Score minimum pour emettre 'Anonyme' (visage detecte mais non reconnu) :
+    // evite d'emettre sur visage trop flou / mal cadre
+    constexpr float   ANON_MIN_SCORE      = 0.40f;
 
     cv::Mat frame, faces, aligned, feat;
     cv::Mat prevGray, smallFrame, gray;
 
-    qint64  lastEventMs   = 0;
-    QString lastEventName;
+    qint64  eventFreezeUntilMs = 0;     // freeze post-event (cooldown global)
     qint64  lastFaceMs    = 0;
     qint64  lastSFaceMs   = 0;
     cv::Rect lastFaceBox;
@@ -405,6 +411,15 @@ void FaceWorker::run()
         const qint64 nowMs    = QDateTime::currentMSecsSinceEpoch();
         const bool   enrolling = (currentMode == Enrolling);
         const bool   isIdle    = !enrolling && (nowMs - lastFaceMs > IDLE_TIMEOUT_MS);
+
+        // ── Event freeze : apres un emit accessGranted/Denied, on stoppe
+        //    toute detection pendant EVENT_FREEZE_MS (5s) pour eviter spam
+        //    et economiser CPU pendant que l'AccessCard est visible.
+        //    L'enrollement ignore le freeze (responsivite requise).
+        if (!enrolling && nowMs < eventFreezeUntilMs) {
+            QThread::msleep(100);
+            continue;
+        }
 
         // ── (1) Motion gate + (proxy luminosité sur la même grayscale) ──────────
         // Une seule conversion BGR→gray downscalée 80×60, réutilisée pour le
@@ -628,17 +643,39 @@ void FaceWorker::run()
                     }
                     matched = !name.isEmpty() && active;
 
-                    if (!name.isEmpty()) {
-                        bool eventCooldown = (nowMs - lastEventMs > COOLDOWN_MS)
-                                          || (name != lastEventName);
-                        if (eventCooldown) {
-                            lastEventMs   = nowMs;
-                            lastEventName = name;
-                            if (active)
-                                emit accessGranted(name, score);
-                            else
-                                emit accessDenied(name, score);
-                        }
+                    // ── Decision evenement : Granted / Denied / Anonyme ────────
+                    QString displayName;
+                    bool    granted    = false;
+                    bool    shouldEmit = false;
+
+                    if (!name.isEmpty() && active) {
+                        // Match OK et user actif -> ACCES ACCORDE
+                        displayName = name;
+                        granted     = true;
+                        shouldEmit  = true;
+                    } else if (!name.isEmpty() && !active) {
+                        // User reconnu mais desactive -> ACCES REFUSE (nom connu)
+                        displayName = name;
+                        granted     = false;
+                        shouldEmit  = true;
+                    } else if (score >= ANON_MIN_SCORE) {
+                        // Aucun match (DB vide ou score < threshold) MAIS visage
+                        // de qualite suffisante -> ACCES REFUSE en tant qu'Anonyme
+                        displayName = QStringLiteral("Anonyme");
+                        granted     = false;
+                        shouldEmit  = true;
+                    }
+                    // Si score < ANON_MIN_SCORE : visage trop flou/mal cadre, on
+                    // n'emet rien (evite spam sur faux positifs/glissements).
+
+                    if (shouldEmit) {
+                        // Active le freeze 5s : detection stoppee pour tout
+                        // jusqu'a fin de l'affichage AccessCard.
+                        eventFreezeUntilMs = nowMs + EVENT_FREEZE_MS;
+                        if (granted)
+                            emit accessGranted(displayName, score);
+                        else
+                            emit accessDenied(displayName, score);
                     }
                 }
             }
