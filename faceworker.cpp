@@ -381,6 +381,10 @@ void FaceWorker::run()
     // Score minimum pour emettre 'Anonyme' (visage detecte mais non reconnu) :
     // evite d'emettre sur visage trop flou / mal cadre
     constexpr float   ANON_MIN_SCORE      = 0.40f;
+    // Vote majoritaire 2/3 : on attend 3 detections et on emet le nom qui
+    // a la majorite (>= 2/3). Robuste contre les flashs de mauvaise reconnaissance.
+    constexpr int     VOTE_BUFFER_SIZE    = 3;
+    constexpr qint64  VOTE_TIMEOUT_MS     = 2000;   // reset buffer si pas de vote depuis 2s
 
     cv::Mat frame, faces, aligned, feat;
     cv::Mat prevGray, smallFrame, gray;
@@ -393,6 +397,11 @@ void FaceWorker::run()
     bool    lastMatchActive = false;
     float   lastMatchScore  = 0.0f;
     int     frameCounter    = 0;
+
+    // Buffer de vote : 3 derniers resultats de detection (rolling)
+    struct VoteEntry { QString name; float score; bool granted; };
+    QVector<VoteEntry> voteBuffer;
+    qint64 lastVoteMs = 0;
 
     while (m_running.load()) {
         if (!m_queue->pop(frame, 200)) continue;
@@ -643,39 +652,77 @@ void FaceWorker::run()
                     }
                     matched = !name.isEmpty() && active;
 
-                    // ── Decision evenement : Granted / Denied / Anonyme ────────
-                    QString displayName;
-                    bool    granted    = false;
-                    bool    shouldEmit = false;
+                    // ── Determination du candidat de vote ──────────────────────
+                    // - Match DB OK actif       -> name, granted=true
+                    // - Match DB OK desactive   -> name, granted=false
+                    // - Pas de match + score OK -> "Anonyme", granted=false
+                    // - Score < ANON_MIN_SCORE  -> on ignore (pas de vote)
+                    QString voteName;
+                    bool    voteGranted = false;
+                    bool    hasVote     = false;
 
-                    if (!name.isEmpty() && active) {
-                        // Match OK et user actif -> ACCES ACCORDE
-                        displayName = name;
-                        granted     = true;
-                        shouldEmit  = true;
-                    } else if (!name.isEmpty() && !active) {
-                        // User reconnu mais desactive -> ACCES REFUSE (nom connu)
-                        displayName = name;
-                        granted     = false;
-                        shouldEmit  = true;
+                    if (!name.isEmpty()) {
+                        voteName    = name;
+                        voteGranted = active;
+                        hasVote     = true;
                     } else if (score >= ANON_MIN_SCORE) {
-                        // Aucun match (DB vide ou score < threshold) MAIS visage
-                        // de qualite suffisante -> ACCES REFUSE en tant qu'Anonyme
-                        displayName = QStringLiteral("Anonyme");
-                        granted     = false;
-                        shouldEmit  = true;
+                        voteName    = QStringLiteral("Anonyme");
+                        voteGranted = false;
+                        hasVote     = true;
                     }
-                    // Si score < ANON_MIN_SCORE : visage trop flou/mal cadre, on
-                    // n'emet rien (evite spam sur faux positifs/glissements).
 
-                    if (shouldEmit) {
-                        // Active le freeze 5s : detection stoppee pour tout
-                        // jusqu'a fin de l'affichage AccessCard.
-                        eventFreezeUntilMs = nowMs + EVENT_FREEZE_MS;
-                        if (granted)
-                            emit accessGranted(displayName, score);
-                        else
-                            emit accessDenied(displayName, score);
+                    if (hasVote) {
+                        // Reset buffer si pas de vote depuis VOTE_TIMEOUT_MS
+                        if (nowMs - lastVoteMs > VOTE_TIMEOUT_MS)
+                            voteBuffer.clear();
+
+                        // Append + rolling : keep only last VOTE_BUFFER_SIZE
+                        voteBuffer.append({ voteName, score, voteGranted });
+                        while (voteBuffer.size() > VOTE_BUFFER_SIZE)
+                            voteBuffer.removeFirst();
+                        lastVoteMs = nowMs;
+
+                        // Decision : si buffer plein, compter la majorite
+                        if (voteBuffer.size() >= VOTE_BUFFER_SIZE) {
+                            QMap<QString, int> counts;
+                            for (const auto &v : voteBuffer) counts[v.name]++;
+
+                            // Trouve le nom avec max occurrences
+                            QString winnerName;
+                            int     winnerCount = 0;
+                            for (auto it = counts.constBegin(); it != counts.constEnd(); ++it) {
+                                if (it.value() > winnerCount) {
+                                    winnerCount = it.value();
+                                    winnerName  = it.key();
+                                }
+                            }
+
+                            // Majorite 2/3 : winner doit avoir >= 2 occurrences
+                            if (winnerCount >= 2) {
+                                // Recupere la derniere entree du gagnant pour score/granted
+                                VoteEntry winner = { winnerName, 0.0f, false };
+                                for (int i = voteBuffer.size() - 1; i >= 0; --i) {
+                                    if (voteBuffer[i].name == winnerName) {
+                                        winner = voteBuffer[i];
+                                        break;
+                                    }
+                                }
+
+                                eventFreezeUntilMs = nowMs + EVENT_FREEZE_MS;
+                                voteBuffer.clear();
+
+                                qDebug() << "[FaceWorker] VOTE 2/3 ->" << winner.name
+                                         << "(granted:" << winner.granted
+                                         << ", score:" << winner.score << ")";
+
+                                if (winner.granted)
+                                    emit accessGranted(winner.name, winner.score);
+                                else
+                                    emit accessDenied(winner.name, winner.score);
+                            }
+                            // Si pas de majorite (3 noms differents) : on continue,
+                            // le prochain vote remplace le plus ancien (rolling).
+                        }
                     }
                 }
             }
