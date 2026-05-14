@@ -41,15 +41,16 @@ AppController::AppController(QObject *parent)
     m_camera->start();
 
     m_face = new FaceWorker(m_frameQueue,
-                            QStringLiteral("/opt/ACL_qt/embeddings/known_faces.json"),
                             QStringLiteral("/opt/ACL_qt/models"),
                             this);
     connect(m_face, &FaceWorker::faceStatusChanged,
             this,   &AppController::onCamFaceStatus);
-    connect(m_face, &FaceWorker::accessGranted,
-            this,   &AppController::onCamAccessGranted);
-    connect(m_face, &FaceWorker::accessDenied,
-            this,   &AppController::onCamAccessDenied);
+    // REST : embedding -> POST /face/match (backend match + permission + socket event)
+    connect(m_face, &FaceWorker::faceMatchRequest,
+            this,   &AppController::onFaceMatchRequest);
+    // REST : enrollment finalize -> POST /face/enroll
+    connect(m_face, &FaceWorker::enrollEmbeddingsReady,
+            this,   &AppController::onEnrollEmbeddingsReady);
     connect(m_face, &FaceWorker::enrollProgress,
             this,   &AppController::onCamEnrollProgress);
     connect(m_face, &FaceWorker::enrollFinished,
@@ -91,6 +92,11 @@ static QString isoToTime(const QString &iso)
 
 void AppController::handleEvent(const QJsonObject &data, const QString &source)
 {
+    // Si le payload contient une cle 'source' (badge / face), on l'utilise.
+    // Sinon on retombe sur le parametre par defaut du caller.
+    const QString sourceFromData = data.value(QStringLiteral("source")).toString();
+    const QString effectiveSource = !sourceFromData.isEmpty() ? sourceFromData : source;
+
     bool granted = data.value(QStringLiteral("status")).toBool();
     if (!granted) {
         const QString evType  = data.value(QStringLiteral("eventType")).toString();
@@ -138,7 +144,7 @@ void AppController::handleEvent(const QJsonObject &data, const QString &source)
     const double  score = data.value(QStringLiteral("score")).toDouble(0.0);
     const QString time  = isoToTime(data.value(QStringLiteral("createdAt")).toString());
 
-    emit accessEvent(granted, name, source, score, door, time, userId);
+    emit accessEvent(granted, name, effectiveSource, score, door, time, userId);
 }
 
 void AppController::onBadgeEvent(const QString &evName, const QJsonObject &data)
@@ -174,27 +180,9 @@ void AppController::onCamFaceStatus(bool face, bool inRoi, bool recognized)
     }
 }
 
-void AppController::onCamAccessGranted(const QString &name, float score)
-{
-    m_faceAccess = QStringLiteral("granted");
-    emit faceStatusChanged();
-    m_accessResetTimer->start();
-
-    const QString time = QTime::currentTime().toString(QStringLiteral("hh:mm:ss"));
-    emit accessEvent(true, name, QStringLiteral("face"),
-                     static_cast<double>(score), QString(), time, QString());
-}
-
-void AppController::onCamAccessDenied(const QString &reason, float score)
-{
-    m_faceAccess = QStringLiteral("denied");
-    emit faceStatusChanged();
-    m_accessResetTimer->start();
-
-    const QString time = QTime::currentTime().toString(QStringLiteral("hh:mm:ss"));
-    emit accessEvent(false, reason, QStringLiteral("face"),
-                     static_cast<double>(score), QString(), time, QString());
-}
+// (onCamAccessGranted/Denied supprimes - les access events face arrivent
+//  desormais via SocketIO depuis le backend, comme les badge events.
+//  handleEvent les traite uniformement.)
 
 void AppController::onCamEnrollProgress(const QVariantMap &status)
 {
@@ -206,7 +194,80 @@ void AppController::onCamEnrollFinished(bool ok, const QString &msg)
 {
     m_lastEnrollStatus.clear();
     emit enrollResult(QStringLiteral("finalize"), ok, msg);
-    if (ok) emit faceUserMutated(QStringLiteral("enroll"), QString());
+    if (ok) emit faceProfileMutated(QStringLiteral("enroll"), QString());
+}
+
+// FaceWorker emet faceMatchRequest -> on POST /face/match (fire and forget)
+// La reponse arrive via SocketIO (access_event) -> handleEvent.
+void AppController::onFaceMatchRequest(const QVector<float> &embedding)
+{
+    QJsonArray arr;
+    for (float v : embedding) arr.append(static_cast<double>(v));
+    QJsonObject body;
+    body[QStringLiteral("embedding")] = arr;
+    // TODO : reader id devrait venir de la config kiosque (ex: m_readerId)
+    body[QStringLiteral("reader")]    = QStringLiteral("1");
+
+    QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/face/match")));
+    req.setHeader(QNetworkRequest::ContentTypeHeader,
+                  QStringLiteral("application/json"));
+    QNetworkReply *reply = m_nam->post(req,
+        QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        const QByteArray body = reply->readAll();
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            qDebug() << "[face/match] HTTP error:" << reply->errorString()
+                     << QString::fromUtf8(body).left(200);
+            return;
+        }
+        // L'event arrive aussi via SocketIO, on log juste la reponse HTTP
+        qDebug() << "[face/match] OK:" << QString::fromUtf8(body).left(200);
+    });
+}
+
+// FaceWorker emet enrollEmbeddingsReady -> POST /face/enroll
+// Reponse -> setEnrollResult sur FaceWorker (emit enrollFinished)
+void AppController::onEnrollEmbeddingsReady(const QString &userId,
+                                            const QVariantMap &embeddings)
+{
+    QJsonObject embObj;
+    for (auto it = embeddings.constBegin(); it != embeddings.constEnd(); ++it) {
+        QJsonArray arr;
+        const QVariantList vec = it.value().toList();
+        for (const QVariant &v : vec) arr.append(v.toDouble());
+        embObj[it.key()] = arr;
+    }
+
+    QJsonObject body;
+    body[QStringLiteral("userId")]     = userId;
+    body[QStringLiteral("embeddings")] = embObj;
+
+    QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/face/enroll")));
+    req.setHeader(QNetworkRequest::ContentTypeHeader,
+                  QStringLiteral("application/json"));
+    QNetworkReply *reply = m_nam->post(req,
+        QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        const QByteArray body = reply->readAll();
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        reply->deleteLater();
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        if (reply->error() != QNetworkReply::NoError || http >= 400) {
+            QString msg = doc.object().value(QStringLiteral("message")).toString();
+            if (msg.isEmpty()) msg = reply->errorString();
+            qDebug() << "[face/enroll] FAIL:" << msg;
+            m_face->setEnrollResult(false, msg);
+            return;
+        }
+        const bool isUpdate = doc.object().value(QStringLiteral("isUpdate")).toBool();
+        const QString msg   = isUpdate
+            ? QStringLiteral("Profil face mis a jour")
+            : QStringLiteral("Profil face cree");
+        qDebug() << "[face/enroll] OK:" << msg;
+        m_face->setEnrollResult(true, msg);
+        emit faceProfileMutated(QStringLiteral("enroll"), QString());
+    });
 }
 
 void AppController::resetFaceAccess()
@@ -232,31 +293,76 @@ void AppController::setStreamPaused(bool paused)
     if (m_camera) m_camera->setPaused(paused);
 }
 
-// ── Face users (FaceWorker/FaceDb) ───────────────────────────────────────────
+// ── Face profiles (REST backend) ─────────────────────────────────────────────
 
-void AppController::listFaceUsers()
+void AppController::lookupUserByCin(const QString &cin)
 {
-    emit faceUsersLoaded(m_face->listUsers());
+    QUrl url(m_controllerUrl + QStringLiteral("/face/user-by-cin"));
+    QUrlQuery q;
+    q.addQueryItem(QStringLiteral("cin"), cin);
+    url.setQuery(q);
+    QNetworkRequest req(url);
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        const QByteArray body = reply->readAll();
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError || http >= 400) {
+            const QJsonDocument doc = QJsonDocument::fromJson(body);
+            QString msg = doc.object().value(QStringLiteral("message")).toString();
+            if (msg.isEmpty()) msg = QStringLiteral("Utilisateur non trouve");
+            emit userLookupResult(false, QVariantMap(), msg);
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        emit userLookupResult(true, doc.object().toVariantMap(), QString());
+    });
 }
 
-void AppController::toggleFaceUser(const QString &name)
+void AppController::listFaceProfiles()
 {
-    m_face->toggleUser(name);
-    emit faceUserMutated(QStringLiteral("toggle"), name);
+    QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/face/profiles")));
+    QNetworkReply *reply = m_nam->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        const QByteArray body = reply->readAll();
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit faceApiError(QStringLiteral("listProfiles"), reply->errorString());
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        if (!doc.isArray()) {
+            emit faceApiError(QStringLiteral("listProfiles"), QStringLiteral("Reponse invalide"));
+            return;
+        }
+        QVariantList profiles;
+        for (const QJsonValue &v : doc.array())
+            profiles.append(v.toObject().toVariantMap());
+        emit faceProfilesLoaded(profiles);
+    });
 }
 
-void AppController::deleteFaceUser(const QString &name)
+void AppController::deleteFaceProfile(const QString &userId)
 {
-    m_face->deleteUser(name);
-    emit faceUserMutated(QStringLiteral("delete"), name);
+    QNetworkRequest req(QUrl(m_controllerUrl
+        + QStringLiteral("/face/profile/") + userId));
+    QNetworkReply *reply = m_nam->deleteResource(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, userId] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            emit faceApiError(QStringLiteral("deleteProfile"), reply->errorString());
+            return;
+        }
+        emit faceProfileMutated(QStringLiteral("delete"), userId);
+    });
 }
 
 // ── Enrôlement live ───────────────────────────────────────────────────────────
 
-void AppController::startEnroll(const QString &name, const QString &role, int samplesPerPose)
+void AppController::startEnroll(const QString &userId, int samplesPerPose)
 {
-    m_face->startEnroll(name, role, samplesPerPose);
-    emit enrollResult(QStringLiteral("start"), true, QStringLiteral("Enrôlement démarré"));
+    m_face->startEnroll(userId, samplesPerPose);
+    emit enrollResult(QStringLiteral("start"), true, QStringLiteral("Enrolement demarre"));
 }
 
 void AppController::finalizeEnroll()

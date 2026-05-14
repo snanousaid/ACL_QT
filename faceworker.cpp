@@ -2,8 +2,6 @@
 #include "framequeue.h"
 #include <QDebug>
 #include <QDateTime>
-#include <QDir>
-#include <QFileInfo>
 #include <QMutexLocker>
 #include <QThread>
 
@@ -29,19 +27,16 @@ namespace {
 #ifndef ACL_OPENCV_ENABLED
 // ── Stub Windows / sans OpenCV ────────────────────────────────────────────────
 
-FaceWorker::FaceWorker(FrameQueue *, const QString &, const QString &, QObject *parent)
+FaceWorker::FaceWorker(FrameQueue *, const QString &, QObject *parent)
     : QThread(parent), m_queue(nullptr) {}
 FaceWorker::~FaceWorker() { stop(); wait(); }
 void FaceWorker::stop()    { m_running.store(0); }
 void FaceWorker::pause()   { QMutexLocker l(&m_mutex); m_mode = Paused; }
 void FaceWorker::resume()  { QMutexLocker l(&m_mutex); m_mode = Detecting; }
-void FaceWorker::startEnroll(const QString &, const QString &, int) {}
+void FaceWorker::startEnroll(const QString &, int) {}
 void FaceWorker::finalizeEnroll() {}
 void FaceWorker::cancelEnroll()   {}
-void FaceWorker::reloadDb()       {}
-QVariantList FaceWorker::listUsers() const { return {}; }
-void FaceWorker::toggleUser(const QString &) {}
-void FaceWorker::deleteUser(const QString &) {}
+void FaceWorker::setEnrollResult(bool, const QString &) {}
 QString FaceWorker::nextPoseToFill_locked() const { return QString(); }
 bool    FaceWorker::allRequiredDone_locked() const { return false; }
 QVariantMap FaceWorker::buildEnrollStatus_locked(bool) const { return {}; }
@@ -188,14 +183,11 @@ static QString estimatePose(const cv::Mat &face)
 // ── Constructeur / Destructeur ────────────────────────────────────────────────
 
 FaceWorker::FaceWorker(FrameQueue *queue,
-                       const QString &dbPath,
                        const QString &modelsDir,
                        QObject *parent)
-    : QThread(parent), m_queue(queue), m_dbPath(dbPath), m_modelsDir(modelsDir)
+    : QThread(parent), m_queue(queue), m_modelsDir(modelsDir)
 {
-    QDir().mkpath(QFileInfo(m_dbPath).absolutePath());
-    m_db.load(m_dbPath);
-    qDebug() << "[FaceWorker] DB chargée —" << m_db.count() << "utilisateurs";
+    qDebug() << "[FaceWorker] init — DB cote backend (REST)";
 }
 
 FaceWorker::~FaceWorker()
@@ -210,11 +202,10 @@ void FaceWorker::stop()   { m_running.store(0); }
 void FaceWorker::pause()  { QMutexLocker l(&m_mutex); m_mode = Paused; }
 void FaceWorker::resume() { QMutexLocker l(&m_mutex); m_mode = Detecting; }
 
-void FaceWorker::startEnroll(const QString &name, const QString &role, int samplesPerPose)
+void FaceWorker::startEnroll(const QString &userId, int samplesPerPose)
 {
     QMutexLocker l(&m_mutex);
-    m_enrollName              = name;
-    m_enrollRole              = role;
+    m_enrollUserId            = userId;
     m_enrollSamplesTarget     = qMax(1, samplesPerPose);
     m_enrollBins.clear();
     for (const QString &p : ACTIVE_POSES) m_enrollBins.insert(p, {});
@@ -223,7 +214,7 @@ void FaceWorker::startEnroll(const QString &name, const QString &role, int sampl
     m_enrollFinalizeRequested = false;
     m_enrollLastSampleMs      = 0;
     m_mode                    = Enrolling;
-    qDebug() << "[FaceWorker] enrollment démarré pour" << name
+    qDebug() << "[FaceWorker] enrollment demarre userId=" << userId
              << "—" << samplesPerPose << "samples/pose";
 }
 
@@ -239,52 +230,17 @@ void FaceWorker::cancelEnroll()
     m_enrollBins.clear();
     m_enrollFinalizeRequested = false;
     m_mode = Detecting;
-    qDebug() << "[FaceWorker] enrollment annulé";
+    qDebug() << "[FaceWorker] enrollment annule";
 }
 
-void FaceWorker::reloadDb()
+// Slot appele par AppController apres reponse REST POST /face/enroll
+void FaceWorker::setEnrollResult(bool ok, const QString &msg)
 {
-    QMutexLocker l(&m_mutex);
-    m_db.load(m_dbPath);
-    qDebug() << "[FaceWorker] DB rechargée —" << m_db.count() << "utilisateurs";
+    emit enrollFinished(ok, msg);
 }
 
-// ── DB ────────────────────────────────────────────────────────────────────────
-
-QVariantList FaceWorker::listUsers() const
-{
-    QMutexLocker l(&m_mutex);
-    QVariantList result;
-    for (const auto &pair : m_db.entries()) {
-        QVariantMap u;
-        u[QStringLiteral("name")]       = pair.first;
-        u[QStringLiteral("role")]       = pair.second.role;
-        u[QStringLiteral("active")]     = pair.second.active;
-        u[QStringLiteral("dim")]        = !pair.second.active;
-        u[QStringLiteral("created_at")] = pair.second.createdAt;
-        result.append(u);
-    }
-    return result;
-}
-
-void FaceWorker::toggleUser(const QString &name)
-{
-    QMutexLocker l(&m_mutex);
-    for (const auto &pair : m_db.entries()) {
-        if (pair.first == name) {
-            m_db.setActive(name, !pair.second.active);
-            m_db.save(m_dbPath);
-            return;
-        }
-    }
-}
-
-void FaceWorker::deleteUser(const QString &name)
-{
-    QMutexLocker l(&m_mutex);
-    m_db.remove(name);
-    m_db.save(m_dbPath);
-}
+// (DB locale supprimee — listUsers/toggleUser/deleteUser/reloadDb sont
+//  desormais cote AppController via endpoints REST /face/profiles)
 
 // ── Helpers enrôlement (mutex tenu) ───────────────────────────────────────────
 
@@ -313,7 +269,7 @@ QVariantMap FaceWorker::buildEnrollStatus_locked(bool inRoi) const
     status[QStringLiteral("in_roi")]       = inRoi;
     status[QStringLiteral("phase")]        = QStringLiteral("enrolling");
     status[QStringLiteral("enroll_msg")]   = m_enrollLastMsg;
-    status[QStringLiteral("enroll_name")]  = m_enrollName;
+    status[QStringLiteral("enroll_user_id")] = m_enrollUserId;
     status[QStringLiteral("enroll_current_pose")] = m_enrollCurrentPose;
     status[QStringLiteral("enroll_next")]  = nextPoseToFill_locked();
     status[QStringLiteral("enroll_complete")] = allRequiredDone_locked();
@@ -378,13 +334,7 @@ void FaceWorker::run()
     // - evite spam events sur visage stable
     // - economise CPU pendant que l'AccessCard est affichee
     constexpr qint64  EVENT_FREEZE_MS     = 5000;
-    // Score minimum pour emettre 'Anonyme' (visage detecte mais non reconnu) :
-    // evite d'emettre sur visage trop flou / mal cadre
-    constexpr float   ANON_MIN_SCORE      = 0.40f;
-    // Vote majoritaire 2/3 : on attend 3 detections et on emet le nom qui
-    // a la majorite (>= 2/3). Robuste contre les flashs de mauvaise reconnaissance.
-    constexpr int     VOTE_BUFFER_SIZE    = 3;
-    constexpr qint64  VOTE_TIMEOUT_MS     = 2000;   // reset buffer si pas de vote depuis 2s
+    // (Vote 2/3 + scoring Anonyme : geres cote backend desormais)
 
     cv::Mat frame, faces, aligned, feat;
     cv::Mat prevGray, smallFrame, gray;
@@ -393,15 +343,7 @@ void FaceWorker::run()
     qint64  lastFaceMs    = 0;
     qint64  lastSFaceMs   = 0;
     cv::Rect lastFaceBox;
-    QString lastMatchName;
-    bool    lastMatchActive = false;
-    float   lastMatchScore  = 0.0f;
     int     frameCounter    = 0;
-
-    // Buffer de vote : 3 derniers resultats de detection (rolling)
-    struct VoteEntry { QString name; float score; bool granted; };
-    QVector<VoteEntry> voteBuffer;
-    qint64 lastVoteMs = 0;
 
     while (m_running.load()) {
         if (!m_queue->pop(frame, 200)) continue;
@@ -514,7 +456,7 @@ void FaceWorker::run()
 
                     bool finalizeNow = false;
                     bool requiredDone = false;
-                    QString enrollName, enrollRole;
+                    QString enrollUserId;
                     QMap<QString, QVector<QVector<float>>> binsCopy;
                     QVariantMap statusMap;
 
@@ -549,8 +491,7 @@ void FaceWorker::run()
                         statusMap     = buildEnrollStatus_locked(true);
                         finalizeNow   = m_enrollFinalizeRequested;
                         requiredDone  = allRequiredDone_locked();
-                        enrollName    = m_enrollName;
-                        enrollRole    = m_enrollRole;
+                        enrollUserId  = m_enrollUserId;
                         binsCopy      = m_enrollBins;
                     }
 
@@ -572,44 +513,49 @@ void FaceWorker::run()
                             }
                             emit enrollFinished(false,
                                 QStringLiteral("Poses manquantes : %1").arg(missing.join(", ")));
-                            qDebug() << "[FaceWorker] enrôlement refusé — manque :" << missing;
+                            qDebug() << "[FaceWorker] enrolement refuse — manque :" << missing;
                         } else {
-                            // moyenne globale (toutes poses confondues)
-                            QVector<QVector<float>> all;
-                            for (const QString &p : ACTIVE_POSES)
-                                for (const auto &s : binsCopy.value(p)) all.append(s);
-
-                            QVector<float> meanEmb = meanEmbedding(all);
-                            if (meanEmb.isEmpty()) {
-                                emit enrollFinished(false, QStringLiteral("Pas d'embedding"));
+                            // Construit map { center: [...], left: [...], ... }
+                            // avec moyenne par pose. AppController POST /face/enroll.
+                            QVariantMap embeddingsMap;
+                            int totalSamples = 0;
+                            for (const QString &p : ACTIVE_POSES) {
+                                const auto &samples = binsCopy.value(p);
+                                if (samples.isEmpty()) continue;
+                                QVector<float> poseMean = meanEmbedding(samples);
+                                QVariantList vec;
+                                for (float v : poseMean) vec.append(v);
+                                embeddingsMap[p] = vec;
+                                totalSamples += samples.size();
+                            }
+                            {
+                                QMutexLocker l(&m_mutex);
+                                m_enrollBins.clear();
+                                m_enrollFinalizeRequested = false;
+                                m_mode = Detecting;
+                            }
+                            if (embeddingsMap.isEmpty()) {
+                                emit enrollFinished(false,
+                                    QStringLiteral("Pas d'embedding"));
                             } else {
-                                FaceEntry entry;
-                                entry.embedding = meanEmb;
-                                entry.role      = enrollRole;
-                                entry.active    = true;
-                                entry.createdAt = QDateTime::currentDateTime()
-                                                    .toString(Qt::ISODate);
-                                {
-                                    QMutexLocker l(&m_mutex);
-                                    m_db.insert(enrollName, entry);
-                                    m_db.save(m_dbPath);
-                                    m_enrollBins.clear();
-                                    m_enrollFinalizeRequested = false;
-                                    m_mode = Detecting;
-                                }
-                                emit enrollFinished(true,
-                                    QStringLiteral("%1 enrôlé(e) (%2 échantillons)")
-                                        .arg(enrollName).arg(all.size()));
-                                qDebug() << "[FaceWorker] enrôlé :" << enrollName
-                                         << "—" << all.size() << "samples";
+                                qDebug() << "[FaceWorker] enrolement -> backend :"
+                                         << "userId=" << enrollUserId
+                                         << "poses=" << embeddingsMap.keys()
+                                         << "samples=" << totalSamples;
+                                // Emit -> AppController POST /face/enroll
+                                // Le enrollFinished sera emit depuis setEnrollResult
+                                // apres reponse REST.
+                                emit enrollEmbeddingsReady(enrollUserId, embeddingsMap);
                             }
                         }
                     }
                 } else {
-                    // ── Mode détection — match + événement ─────────────────────
-                    // (4) SFace cooldown : si même visage à la même position
-                    // depuis <2 s, on réutilise le dernier match au lieu de
-                    // refaire alignCrop+feature+match (le plus coûteux).
+                    // ── Mode détection — envoi embedding au backend ────────────
+                    // (Pas de match local : la DB est cote serveur, le backend
+                    //  fait cosinus + permission + emit access_event SocketIO.)
+                    //
+                    // SFace cooldown : evite de re-extraire l'embedding 30x/s
+                    // pour le meme visage stable.
                     cv::Rect curBox(static_cast<int>(best.at<float>(0, 0)),
                                     static_cast<int>(best.at<float>(0, 1)),
                                     static_cast<int>(best.at<float>(0, 2)),
@@ -619,17 +565,10 @@ void FaceWorker::run()
                                  && std::abs(curBox.y - lastFaceBox.y) < SFACE_BBOX_TOL_PX;
                     bool sfaceFresh = (nowMs - lastSFaceMs) < SFACE_COOLDOWN_MS;
 
-                    QString name;
-                    float   score  = 0.0f;
-                    bool    active = true;
-
-                    if (sameFace && sfaceFresh && !lastMatchName.isEmpty()) {
-                        // Cooldown actif → on skip alignCrop+feature+match
-                        name   = lastMatchName;
-                        score  = lastMatchScore;
-                        active = lastMatchActive;
+                    if (sameFace && sfaceFresh) {
+                        // Meme visage recent : skip extraction (CPU)
                     } else {
-                        // Pas de cooldown → calcul embedding + match
+                        // Extraction embedding via SFace
                         QVector<float> emb;
                         try {
                             recognizer->alignCrop(frame, best, aligned);
@@ -640,89 +579,19 @@ void FaceWorker::run()
                             emit faceStatusChanged(hasFace, inRoi, false);
                             continue;
                         }
-                        {
-                            QMutexLocker l(&m_mutex);
-                            name = m_db.match(emb, MATCH_THRESH, &score, &active);
-                        }
-                        lastSFaceMs     = nowMs;
-                        lastFaceBox     = curBox;
-                        lastMatchName   = name;
-                        lastMatchScore  = score;
-                        lastMatchActive = active;
-                    }
-                    matched = !name.isEmpty() && active;
+                        lastSFaceMs = nowMs;
+                        lastFaceBox = curBox;
 
-                    // ── Determination du candidat de vote ──────────────────────
-                    // - Match DB OK actif       -> name, granted=true
-                    // - Match DB OK desactive   -> name, granted=false
-                    // - Pas de match + score OK -> "Anonyme", granted=false
-                    // - Score < ANON_MIN_SCORE  -> on ignore (pas de vote)
-                    QString voteName;
-                    bool    voteGranted = false;
-                    bool    hasVote     = false;
-
-                    if (!name.isEmpty()) {
-                        voteName    = name;
-                        voteGranted = active;
-                        hasVote     = true;
-                    } else if (score >= ANON_MIN_SCORE) {
-                        voteName    = QStringLiteral("Anonyme");
-                        voteGranted = false;
-                        hasVote     = true;
-                    }
-
-                    if (hasVote) {
-                        // Reset buffer si pas de vote depuis VOTE_TIMEOUT_MS
-                        if (nowMs - lastVoteMs > VOTE_TIMEOUT_MS)
-                            voteBuffer.clear();
-
-                        // Append + rolling : keep only last VOTE_BUFFER_SIZE
-                        voteBuffer.append({ voteName, score, voteGranted });
-                        while (voteBuffer.size() > VOTE_BUFFER_SIZE)
-                            voteBuffer.removeFirst();
-                        lastVoteMs = nowMs;
-
-                        // Decision : si buffer plein, compter la majorite
-                        if (voteBuffer.size() >= VOTE_BUFFER_SIZE) {
-                            QMap<QString, int> counts;
-                            for (const auto &v : voteBuffer) counts[v.name]++;
-
-                            // Trouve le nom avec max occurrences
-                            QString winnerName;
-                            int     winnerCount = 0;
-                            for (auto it = counts.constBegin(); it != counts.constEnd(); ++it) {
-                                if (it.value() > winnerCount) {
-                                    winnerCount = it.value();
-                                    winnerName  = it.key();
-                                }
-                            }
-
-                            // Majorite 2/3 : winner doit avoir >= 2 occurrences
-                            if (winnerCount >= 2) {
-                                // Recupere la derniere entree du gagnant pour score/granted
-                                VoteEntry winner = { winnerName, 0.0f, false };
-                                for (int i = voteBuffer.size() - 1; i >= 0; --i) {
-                                    if (voteBuffer[i].name == winnerName) {
-                                        winner = voteBuffer[i];
-                                        break;
-                                    }
-                                }
-
-                                eventFreezeUntilMs = nowMs + EVENT_FREEZE_MS;
-                                voteBuffer.clear();
-
-                                qDebug() << "[FaceWorker] VOTE 2/3 ->" << winner.name
-                                         << "(granted:" << winner.granted
-                                         << ", score:" << winner.score << ")";
-
-                                if (winner.granted)
-                                    emit accessGranted(winner.name, winner.score);
-                                else
-                                    emit accessDenied(winner.name, winner.score);
-                            }
-                            // Si pas de majorite (3 noms differents) : on continue,
-                            // le prochain vote remplace le plus ancien (rolling).
-                        }
+                        // Emit -> AppController POST /face/match
+                        // Le backend decide granted/denied/Anonyme + permission
+                        // + emit access_event SocketIO -> AppController.handleEvent
+                        // Cote Qt, on freeze toute detection 5s post-emit
+                        // (l'access_event arrive ~50-100ms apres, le freeze
+                        //  evite de spam le backend).
+                        emit faceMatchRequest(emb);
+                        eventFreezeUntilMs = nowMs + EVENT_FREEZE_MS;
+                        matched = true;   // pour faceStatusChanged en fin de loop
+                        qDebug() << "[FaceWorker] embedding -> backend (freeze 5s)";
                     }
                 }
             }

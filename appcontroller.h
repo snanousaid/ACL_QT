@@ -39,14 +39,13 @@ public:
     // l'enrôlement qui doit garder la caméra active.
     Q_INVOKABLE void setStreamPaused(bool paused);
 
-    // ── Face users (C++ — FaceDb via CameraWorker) ──────────────────────────
-    Q_INVOKABLE void listFaceUsers();
-    Q_INVOKABLE void toggleFaceUser(const QString &name);
-    Q_INVOKABLE void deleteFaceUser(const QString &name);
+    // ── Face profiles (REST → backend acl_controller) ──────────────────────
+    Q_INVOKABLE void lookupUserByCin(const QString &cin);
+    Q_INVOKABLE void listFaceProfiles();
+    Q_INVOKABLE void deleteFaceProfile(const QString &userId);
 
-    // ── Enrôlement live (C++) ───────────────────────────────────────────────
-    Q_INVOKABLE void startEnroll(const QString &name, const QString &role,
-                                 int samplesPerPose);
+    // ── Enrôlement live (capture cote Qt, save cote backend) ────────────────
+    Q_INVOKABLE void startEnroll(const QString &userId, int samplesPerPose);
     Q_INVOKABLE void finalizeEnroll();
     Q_INVOKABLE void cancelEnroll();
     Q_INVOKABLE void pollEnrollStatus();
@@ -74,9 +73,11 @@ signals:
     void accessEvent(bool granted, const QString &name, const QString &source,
                      double score, const QString &door, const QString &time,
                      const QString &userId);
-    void faceUsersLoaded(const QVariantList &users);
+    // ── Face REST signals ────────────────────────────────────────────────
+    void userLookupResult(bool found, const QVariantMap &user, const QString &errorMsg);
+    void faceProfilesLoaded(const QVariantList &profiles);
+    void faceProfileMutated(const QString &op, const QString &userId);
     void faceApiError(const QString &op, const QString &msg);
-    void faceUserMutated(const QString &op, const QString &name);
     void enrollStatus(const QVariantMap &status);
     void enrollResult(const QString &op, bool ok, const QString &msg);
     void networkInfoLoaded(const QVariantMap &info);
@@ -89,10 +90,12 @@ private slots:
     void onBadgeEvent(const QString &evName, const QJsonObject &data);
     void onFaceEvent (const QString &evName, const QJsonObject &data);
     void onCamFaceStatus(bool face, bool inRoi, bool recognized);
-    void onCamAccessGranted(const QString &name, float score);
-    void onCamAccessDenied(const QString &reason, float score);
     void onCamEnrollProgress(const QVariantMap &status);
     void onCamEnrollFinished(bool ok, const QString &msg);
+    // FaceWorker -> REST bridge
+    void onFaceMatchRequest(const QVector<float> &embedding);
+    void onEnrollEmbeddingsReady(const QString &userId,
+                                 const QVariantMap &embeddings);
     void resetFaceAccess();
 
 private:
