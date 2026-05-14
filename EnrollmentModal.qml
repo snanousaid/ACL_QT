@@ -11,13 +11,18 @@ Rectangle {
     property var controller: null
     property var keyboard: null
 
-    // États : "form" (saisie nom/role) → "live" (capture poses) → "done"
+    // États : "form" (lookup CIN) → "live" (capture poses) → "done"
     property string state: "form"
     property string errorMsg: ""
 
-    // Saisie
-    property string userName: ""
-    property string userRole: "user"
+    // Lookup CIN -> User (via backend GET /face/user-by-cin)
+    property string userCin: ""
+    property string selectedUserId: ""
+    property string selectedUserName: ""
+    property bool   selectedUserActive: true
+    property bool   hasExistingFace: false
+    property bool   lookupBusy: false
+
     property int    samplesPerPose: 10
 
     // Statut backend (rempli par poll)
@@ -42,11 +47,27 @@ Rectangle {
         visible = true
         state = "form"
         errorMsg = ""
-        userName = ""
-        userRole = "user"
+        userCin = ""
+        selectedUserId = ""
+        selectedUserName = ""
+        selectedUserActive = true
+        hasExistingFace = false
+        lookupBusy = false
         samplesPerPose = 10
         status = {}
-        if (typeof nameInput !== "undefined") nameInput.text = ""
+        if (typeof cinInput !== "undefined") cinInput.text = ""
+    }
+
+    function lookupUser() {
+        if (userCin.trim().length === 0) {
+            errorMsg = "Entrez un CIN valide."
+            return
+        }
+        errorMsg = ""
+        selectedUserId = ""
+        selectedUserName = ""
+        lookupBusy = true
+        controller.lookupUserByCin(userCin.trim())
     }
     function close() {
         if (state === "live") controller.cancelEnroll()
@@ -59,6 +80,26 @@ Rectangle {
     Connections {
         target: root.controller
         ignoreUnknownSignals: true
+
+        // GET /face/user-by-cin -> reponse
+        onUserLookupResult: {
+            root.lookupBusy = false
+            if (!found) {
+                root.errorMsg = errorMsg.length > 0
+                    ? errorMsg
+                    : "Utilisateur non trouvé. Demandez à l'admin de le créer dans le dashboard."
+                return
+            }
+            root.errorMsg = ""
+            root.selectedUserId    = user.id || ""
+            var fn = (user.first_name || "").trim()
+            var ln = (user.last_name  || "").trim()
+            root.selectedUserName  = (fn + " " + ln).trim()
+            root.selectedUserActive = user.isActif !== false
+            // user.faceProfile != null => le user a deja un FaceProfile (sera upsert)
+            root.hasExistingFace   = !!user.faceProfile
+        }
+
         onEnrollResult: {
             if (op === "start") {
                 if (ok) {
@@ -114,7 +155,7 @@ Rectangle {
             Text {
                 anchors { left: parent.left; leftMargin: 20; top: parent.top; topMargin: 12 }
                 text: root.state === "form" ? "Nouvel utilisateur"
-                    : root.state === "live" ? "Enrôlement — " + root.userName
+                    : root.state === "live" ? "Enrôlement — " + root.selectedUserName
                     : "Terminé"
                 color: "white"; font.pixelSize: 15; font.weight: Font.Bold
             }
@@ -219,45 +260,76 @@ Rectangle {
                 anchors.fill: parent
                 spacing: 14
 
-                Text { text: "Nom"; color: "#cbd5e1"; font.pixelSize: 12 }
-                KbInput {
-                    id: nameInput
+                // ── Lookup CIN ──
+                Text { text: "CIN de l'utilisateur"; color: "#cbd5e1"; font.pixelSize: 12 }
+                Row {
                     width: parent.width
-                    keyboard: root.keyboard
-                    placeholder: "ex: Jean Dupont"
-                    onTextChanged: root.userName = text
+                    spacing: 8
+                    KbInput {
+                        id: cinInput
+                        width: parent.width - searchBtn.width - 8
+                        keyboard: root.keyboard
+                        placeholder: "ex: AB123456"
+                        onTextChanged: {
+                            root.userCin = text
+                            // Reset lookup si user change le CIN
+                            if (root.selectedUserId.length > 0) {
+                                root.selectedUserId = ""
+                                root.selectedUserName = ""
+                                root.hasExistingFace = false
+                            }
+                        }
+                    }
+                    AppButton {
+                        id: searchBtn
+                        width: 110; height: 38
+                        variant: "primary"
+                        text: root.lookupBusy ? "..." : "Rechercher"
+                        fontSize: 12
+                        enabled: !root.lookupBusy && root.userCin.trim().length > 0
+                        onClicked: root.lookupUser()
+                    }
                 }
 
-                Text { text: "Rôle"; color: "#cbd5e1"; font.pixelSize: 12 }
-                Row {
-                    spacing: 8
-                    Repeater {
-                        model: ["user", "admin"]
-                        AppButton {
-                            property bool selected: root.userRole === modelData
-                            width: 100; height: 36
-                            text: modelData
-                            fontSize: 12
-                            background: Rectangle {
-                                radius: 8
-                                color: parent.selected ? "#2563eb" : (parent.pressed ? "#0f172a" : "#1e293b")
-                                border.color: parent.selected ? "#3b82f6" : "#334155"
-                                border.width: 1
-                                Behavior on color { ColorAnimation { duration: 120 } }
+                // ── Résultat du lookup ──
+                Rectangle {
+                    visible: root.selectedUserId.length > 0
+                    width: parent.width
+                    height: 56
+                    radius: 8
+                    color: "#1e293b"
+                    border.color: root.hasExistingFace ? "#f59e0b" : "#22c55e"
+                    border.width: 1
+                    Column {
+                        anchors { fill: parent; margins: 12 }
+                        spacing: 3
+                        Row {
+                            spacing: 8
+                            Text {
+                                text: root.hasExistingFace ? "⚠" : "✓"
+                                color: root.hasExistingFace ? "#f59e0b" : "#22c55e"
+                                font.pixelSize: 16; font.weight: Font.Bold
                             }
-                            contentItem: Text {
-                                text: parent.text
-                                color: parent.selected ? "white" : "#94a3b8"
-                                font.pixelSize: 12; font.weight: Font.DemiBold
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
+                            Text {
+                                text: root.selectedUserName
+                                color: "white"; font.pixelSize: 14; font.weight: Font.DemiBold
+                                anchors.verticalCenter: parent.verticalCenter
                             }
-                            onClicked: root.userRole = modelData
+                        }
+                        Text {
+                            text: !root.selectedUserActive
+                                ? "Utilisateur désactivé"
+                                : (root.hasExistingFace
+                                    ? "Profil face existant — sera remplacé"
+                                    : "Nouvel enrôlement face")
+                            color: !root.selectedUserActive ? "#f87171"
+                                : (root.hasExistingFace ? "#fbbf24" : "#86efac")
+                            font.pixelSize: 11
                         }
                     }
                 }
 
-                Item { width: 1; height: 8 }
+                Item { width: 1; height: 4 }
 
                 Text { text: "Échantillons par pose (3-30)"; color: "#cbd5e1"; font.pixelSize: 12 }
                 Row {
@@ -341,12 +413,14 @@ Rectangle {
                 anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
                 height: 44
                 variant: "primary"
-                enabled: root.userName.length > 0
-                text: "Démarrer l'enrôlement"
+                enabled: root.selectedUserId.length > 0 && root.selectedUserActive
+                text: root.hasExistingFace
+                    ? "Remplacer le profil face"
+                    : "Démarrer l'enrôlement"
                 onClicked: {
                     root.errorMsg = ""
                     if (root.keyboard) root.keyboard.close()
-                    root.controller.startEnroll(root.userName, root.userRole, root.samplesPerPose)
+                    root.controller.startEnroll(root.selectedUserId, root.samplesPerPose)
                 }
             }
         }
