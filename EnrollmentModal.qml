@@ -418,8 +418,20 @@ Rectangle {
                     ? "Remplacer le profil face"
                     : "Démarrer l'enrôlement"
                 onClicked: {
+                    // Force commit du champ samplesField si l'utilisateur a tape
+                    // une nouvelle valeur sans valider (pas de Enter / focus loss).
+                    // Sinon root.samplesPerPose reste a l'ancienne valeur (ex 10).
+                    if (typeof samplesField !== "undefined") {
+                        var v = parseInt(samplesField.text)
+                        if (isNaN(v) || v < 3) v = 3
+                        if (v > 30) v = 30
+                        if (root.samplesPerPose !== v) root.samplesPerPose = v
+                    }
+
                     root.errorMsg = ""
                     if (root.keyboard) root.keyboard.close()
+                    console.log("[Enrollment] startEnroll userId=" + root.selectedUserId
+                              + " samplesPerPose=" + root.samplesPerPose)
                     root.controller.startEnroll(root.selectedUserId, root.samplesPerPose)
                 }
             }
