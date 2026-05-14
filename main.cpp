@@ -2,6 +2,8 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QDebug>
+#include <QVector>
+#include <QMetaType>
 #include "mjpegitem.h"
 #include "appcontroller.h"
 #include "cameraimgprovider.h"
@@ -18,6 +20,10 @@ int main(int argc, char *argv[])
     qputenv("QT_IM_MODULE", QByteArray("qtvirtualkeyboard"));
 
     QGuiApplication app(argc, argv);
+
+    // Enregistrement metatypes pour signaux cross-thread
+    // (FaceWorker emit faceMatchRequest(QVector<float>) -> AppController main thread)
+    qRegisterMetaType<QVector<float>>("QVector<float>");
 
     // ── Test OpenCV (retirer après validation) ────────────────────────────────
     QString cvResult = runOpenCvTest(QStringLiteral("/opt/ACL_qt/models"));
