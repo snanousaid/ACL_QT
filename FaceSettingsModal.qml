@@ -8,9 +8,10 @@ Rectangle {
     z: 50
 
     property var controller: null
-    property var users: []
+    // Liste des profils faces : [{ id, userId, user: {first_name, last_name, cin, isActif}, createdAt }]
+    property var profiles: []
     property string errorMsg: ""
-    property string busyName: ""   // nom en cours d'opération (toggle/delete) → spinner / disable
+    property string busyUserId: ""   // userId en cours de suppression (spinner / disable)
 
     signal closed()
     signal openEnroll()
@@ -18,7 +19,7 @@ Rectangle {
     function open() {
         visible = true
         errorMsg = ""
-        if (controller) controller.listFaceUsers()
+        if (controller) controller.listFaceProfiles()
     }
     function close() {
         visible = false
@@ -29,17 +30,17 @@ Rectangle {
     Connections {
         target: root.controller
         ignoreUnknownSignals: true
-        onFaceUsersLoaded: {
-            root.users = users
-            root.busyName = ""
+        onFaceProfilesLoaded: {
+            root.profiles = profiles
+            root.busyUserId = ""
         }
         onFaceApiError: {
             root.errorMsg = op + ": " + msg
-            root.busyName = ""
+            root.busyUserId = ""
         }
-        onFaceUserMutated: {
-            // recharge la liste après toggle/delete
-            if (root.controller) root.controller.listFaceUsers()
+        onFaceProfileMutated: {
+            // recharge la liste après enroll / delete
+            if (root.controller) root.controller.listFaceProfiles()
         }
     }
 
@@ -75,9 +76,10 @@ Rectangle {
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 2
-                    Text { text: "Face ID — Utilisateurs"; color: "white"; font.pixelSize: 16; font.weight: Font.Bold }
+                    Text { text: "Face ID — Profils"; color: "white"; font.pixelSize: 16; font.weight: Font.Bold }
                     Text {
-                        text: root.users.length + " enregistré" + (root.users.length > 1 ? "s" : "")
+                        text: root.profiles.length + " profil" + (root.profiles.length > 1 ? "s" : "")
+                              + " enregistré" + (root.profiles.length > 1 ? "s" : "")
                         color: "#64748b"; font.pixelSize: 11
                     }
                 }
@@ -111,16 +113,25 @@ Rectangle {
         }
 
         // Empty state
-        Text {
+        Column {
             anchors.centerIn: parent
-            visible: root.users.length === 0 && root.errorMsg.length === 0
-            text: "Aucun utilisateur enrôlé."
-            color: "#64748b"; font.pixelSize: 13
+            spacing: 8
+            visible: root.profiles.length === 0 && root.errorMsg.length === 0
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Aucun profil face enregistré."
+                color: "#64748b"; font.pixelSize: 13
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Cliquez sur + Nouveau pour enrôler un utilisateur."
+                color: "#475569"; font.pixelSize: 11
+            }
         }
 
-        // Users list
+        // Profiles list
         ListView {
-            id: usersList
+            id: profilesList
             clip: true
             anchors {
                 top: errBanner.visible ? errBanner.bottom : cardHeader.bottom
@@ -128,34 +139,46 @@ Rectangle {
                 bottom: refreshBar.top
                 topMargin: 8; leftMargin: 12; rightMargin: 12; bottomMargin: 8
             }
-            model: root.users
+            model: root.profiles
             spacing: 8
-            visible: root.users.length > 0
+            visible: root.profiles.length > 0
 
             delegate: Rectangle {
-                width: usersList.width
+                readonly property var p: modelData
+                readonly property var u: modelData.user || ({})
+                readonly property bool userActive: u.isActif !== false
+                readonly property string fullName:
+                    ((u.first_name || "") + " " + (u.last_name || "")).trim() || "(sans nom)"
+                readonly property string userId: p.userId || ""
+
+                width: profilesList.width
                 height: 64
                 radius: 10
-                color: modelData.active ? "#1e293b" : "#0b1220"
+                color: userActive ? "#1e293b" : "#0b1220"
                 border.color: "#334155"
-                opacity: root.busyName === modelData.name ? 0.5 : 1
+                opacity: root.busyUserId === userId ? 0.5 : 1
 
                 Row {
                     anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
                     spacing: 12
 
+                    // Indicateur état User.isActif (vert / gris)
                     Rectangle {
                         width: 8; height: 40; radius: 4
-                        color: modelData.active ? "#22c55e" : "#475569"
+                        color: userActive ? "#22c55e" : "#475569"
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
                     Column {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 3
-                        Text { text: modelData.name; color: "white"; font.pixelSize: 14; font.weight: Font.DemiBold }
                         Text {
-                            text: modelData.role + (modelData.created_at ? " — " + modelData.created_at : "")
+                            text: fullName
+                            color: "white"; font.pixelSize: 14; font.weight: Font.DemiBold
+                        }
+                        Text {
+                            text: "CIN: " + (u.cin || "—")
+                                  + (p.createdAt ? "  •  " + String(p.createdAt).substr(0, 10) : "")
                             color: "#64748b"; font.pixelSize: 10
                         }
                     }
@@ -165,34 +188,24 @@ Rectangle {
                     anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
                     spacing: 8
 
-                    AppButton {
-                        width: 64; height: 32
-                        enabled: root.busyName === ""
-                        text: modelData.active ? "Actif" : "Off"
-                        fontSize: 10
-                        background: Rectangle {
-                            radius: 8
-                            color: modelData.active ? "#0f3a26" : "#1e293b"
-                            border.color: modelData.active ? "#22c55e" : "#475569"
-                            border.width: 1
-                            opacity: parent.enabled ? 1 : 0.5
-                        }
-                        contentItem: Text {
-                            text: parent.text
-                            color: modelData.active ? "#86efac" : "#94a3b8"
+                    // Statut User.isActif (lecture seule - geré dans dashboard web)
+                    Rectangle {
+                        width: 64; height: 24; radius: 8
+                        color: userActive ? "#0f3a26" : "#1e293b"
+                        border.color: userActive ? "#22c55e" : "#475569"
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: userActive ? "Actif" : "Inactif"
+                            color: userActive ? "#86efac" : "#94a3b8"
                             font.pixelSize: 10; font.weight: Font.DemiBold
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        onClicked: {
-                            root.busyName = modelData.name
-                            root.controller.toggleFaceUser(modelData.name)
                         }
                     }
 
+                    // Bouton supprimer (DELETE /face/profile/:userId)
                     AppButton {
                         width: 36; height: 32
-                        enabled: root.busyName === ""
+                        enabled: root.busyUserId === ""
                         text: "🗑"
                         background: Rectangle {
                             radius: 8
@@ -206,8 +219,9 @@ Rectangle {
                             verticalAlignment: Text.AlignVCenter
                         }
                         onClicked: {
-                            confirmDelete.targetName = modelData.name
-                            confirmDelete.visible = true
+                            confirmDelete.targetUserId  = userId
+                            confirmDelete.targetName    = fullName
+                            confirmDelete.visible       = true
                         }
                     }
                 }
@@ -243,7 +257,7 @@ Rectangle {
                     variant: "secondary"
                     text: "Rafraîchir"
                     fontSize: 12; bold: false
-                    onClicked: { root.errorMsg = ""; root.controller.listFaceUsers() }
+                    onClicked: { root.errorMsg = ""; root.controller.listFaceProfiles() }
                 }
 
                 AppButton {
@@ -264,6 +278,7 @@ Rectangle {
         visible: false
         color: "#cc000000"
         z: 60
+        property string targetUserId: ""
         property string targetName: ""
 
         MouseArea { anchors.fill: parent; onClicked: confirmDelete.visible = false }
@@ -281,9 +296,11 @@ Rectangle {
                           topMargin: 20; leftMargin: 20; rightMargin: 20 }
                 spacing: 12
 
-                Text { text: "Supprimer ?"; color: "white"; font.pixelSize: 15; font.weight: Font.Bold }
+                Text { text: "Supprimer le profil face ?"; color: "white"; font.pixelSize: 15; font.weight: Font.Bold }
                 Text {
-                    text: "L'utilisateur « " + confirmDelete.targetName + " » sera supprimé définitivement."
+                    text: "Le profil face de « " + confirmDelete.targetName
+                          + " » sera supprimé. L'utilisateur reste actif "
+                          + "(seul son accès Face ID est retiré)."
                     color: "#cbd5e1"; font.pixelSize: 11; wrapMode: Text.WordWrap; width: parent.width
                 }
 
@@ -301,8 +318,8 @@ Rectangle {
                         text: "Supprimer"; fontSize: 12
                         onClicked: {
                             confirmDelete.visible = false
-                            root.busyName = confirmDelete.targetName
-                            root.controller.deleteFaceUser(confirmDelete.targetName)
+                            root.busyUserId = confirmDelete.targetUserId
+                            root.controller.deleteFaceProfile(confirmDelete.targetUserId)
                         }
                     }
                 }
