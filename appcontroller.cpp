@@ -208,21 +208,37 @@ void AppController::onFaceMatchRequest(const QVector<float> &embedding)
     // TODO : reader id devrait venir de la config kiosque (ex: m_readerId)
     body[QStringLiteral("reader")]    = QStringLiteral("1");
 
-    QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/face/match")));
+    const QString url = m_controllerUrl + QStringLiteral("/face/match");
+    qDebug() << "[face/match] POST url=" << url
+             << "embedding.size=" << embedding.size();
+
+    QNetworkRequest req((QUrl(url)));
     req.setHeader(QNetworkRequest::ContentTypeHeader,
                   QStringLiteral("application/json"));
+    // Timeout court pour ne pas bloquer si le backend est inaccessible
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    req.setTransferTimeout(5000);
+#endif
     QNetworkReply *reply = m_nam->post(req,
         QJsonDocument(body).toJson(QJsonDocument::Compact));
+    if (!reply) {
+        qDebug() << "[face/match] ERREUR : QNAM->post a retourne nullptr !";
+        return;
+    }
+    qDebug() << "[face/match] reply cree, en attente de finished...";
+
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        const QByteArray body = reply->readAll();
+        const QByteArray respBody = reply->readAll();
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError) {
             qDebug() << "[face/match] HTTP error:" << reply->errorString()
-                     << QString::fromUtf8(body).left(200);
+                     << "(HTTP" << http << ")"
+                     << QString::fromUtf8(respBody).left(200);
             return;
         }
-        // L'event arrive aussi via SocketIO, on log juste la reponse HTTP
-        qDebug() << "[face/match] OK:" << QString::fromUtf8(body).left(200);
+        qDebug() << "[face/match] OK (HTTP" << http << "):"
+                 << QString::fromUtf8(respBody).left(200);
     });
 }
 
