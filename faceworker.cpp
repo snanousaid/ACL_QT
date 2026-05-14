@@ -372,6 +372,67 @@ void FaceWorker::run()
             continue;
         }
 
+        // ── Finalize enrolement (independant de la detection de visage) ────────
+        // Si l'utilisateur clique 'Valider' alors qu'il a deja capture les
+        // poses requises, la finalisation se fait IMMEDIATEMENT — peu importe
+        // s'il y a un visage actuellement dans la ROI.
+        bool finalizePending = false;
+        if (enrolling) {
+            QMutexLocker l(&m_mutex);
+            finalizePending = m_enrollFinalizeRequested;
+        }
+        if (finalizePending) {
+            bool requiredDone = false;
+            QString enrollUserId;
+            QMap<QString, QVector<QVector<float>>> binsCopy;
+            int sampleTarget;
+            {
+                QMutexLocker l(&m_mutex);
+                requiredDone  = allRequiredDone_locked();
+                enrollUserId  = m_enrollUserId;
+                binsCopy      = m_enrollBins;
+                sampleTarget  = m_enrollSamplesTarget;
+                // Reset flag + sortie mode enrollment AVANT emit pour eviter
+                // re-traitement sur les frames suivantes.
+                m_enrollFinalizeRequested = false;
+                m_enrollBins.clear();
+                m_mode = Detecting;
+            }
+            if (!requiredDone) {
+                QStringList missing;
+                for (const QString &p : REQUIRED_POSES) {
+                    if (binsCopy.value(p).size() < sampleTarget)
+                        missing.append(poseLabel(p));
+                }
+                qDebug() << "[FaceWorker] finalize refuse — manque :" << missing;
+                emit enrollFinished(false,
+                    QStringLiteral("Poses manquantes : %1").arg(missing.join(", ")));
+            } else {
+                // Construit la map { center: [...], left: [...], ... } avec
+                // moyenne par pose et emit -> AppController POST /face/enroll.
+                QVariantMap embeddingsMap;
+                int totalSamples = 0;
+                for (const QString &p : ACTIVE_POSES) {
+                    const auto &samples = binsCopy.value(p);
+                    if (samples.isEmpty()) continue;
+                    QVector<float> poseMean = meanEmbedding(samples);
+                    QVariantList vec;
+                    for (float v : poseMean) vec.append(v);
+                    embeddingsMap[p] = vec;
+                    totalSamples += samples.size();
+                }
+                if (embeddingsMap.isEmpty()) {
+                    emit enrollFinished(false, QStringLiteral("Pas d'embedding"));
+                } else {
+                    qDebug() << "[FaceWorker] finalize -> backend : userId="
+                             << enrollUserId << "poses=" << embeddingsMap.keys()
+                             << "samples=" << totalSamples;
+                    emit enrollEmbeddingsReady(enrollUserId, embeddingsMap);
+                }
+            }
+            continue;  // skip detection pour cette frame
+        }
+
         // ── (1) Motion gate + (proxy luminosité sur la même grayscale) ──────────
         // Une seule conversion BGR→gray downscalée 80×60, réutilisée pour le
         // diff de mouvement ET le check luminosité. ~0.5 ms vs ~5 ms full-res HSV.
@@ -454,10 +515,6 @@ void FaceWorker::run()
 
                     QString pose = estimatePose(best);
 
-                    bool finalizeNow = false;
-                    bool requiredDone = false;
-                    QString enrollUserId;
-                    QMap<QString, QVector<QVector<float>>> binsCopy;
                     QVariantMap statusMap;
 
                     {
@@ -488,67 +545,13 @@ void FaceWorker::run()
                             }
                         }
 
-                        statusMap     = buildEnrollStatus_locked(true);
-                        finalizeNow   = m_enrollFinalizeRequested;
-                        requiredDone  = allRequiredDone_locked();
-                        enrollUserId  = m_enrollUserId;
-                        binsCopy      = m_enrollBins;
+                        statusMap = buildEnrollStatus_locked(true);
                     }
 
                     emit enrollProgress(statusMap);
 
-                    if (finalizeNow) {
-                        if (!requiredDone) {
-                            // refuse — poses obligatoires manquantes
-                            QStringList missing;
-                            for (const QString &p : REQUIRED_POSES) {
-                                if (binsCopy.value(p).size() < m_enrollSamplesTarget)
-                                    missing.append(poseLabel(p));
-                            }
-                            {
-                                QMutexLocker l(&m_mutex);
-                                m_enrollBins.clear();
-                                m_enrollFinalizeRequested = false;
-                                m_mode = Detecting;
-                            }
-                            emit enrollFinished(false,
-                                QStringLiteral("Poses manquantes : %1").arg(missing.join(", ")));
-                            qDebug() << "[FaceWorker] enrolement refuse — manque :" << missing;
-                        } else {
-                            // Construit map { center: [...], left: [...], ... }
-                            // avec moyenne par pose. AppController POST /face/enroll.
-                            QVariantMap embeddingsMap;
-                            int totalSamples = 0;
-                            for (const QString &p : ACTIVE_POSES) {
-                                const auto &samples = binsCopy.value(p);
-                                if (samples.isEmpty()) continue;
-                                QVector<float> poseMean = meanEmbedding(samples);
-                                QVariantList vec;
-                                for (float v : poseMean) vec.append(v);
-                                embeddingsMap[p] = vec;
-                                totalSamples += samples.size();
-                            }
-                            {
-                                QMutexLocker l(&m_mutex);
-                                m_enrollBins.clear();
-                                m_enrollFinalizeRequested = false;
-                                m_mode = Detecting;
-                            }
-                            if (embeddingsMap.isEmpty()) {
-                                emit enrollFinished(false,
-                                    QStringLiteral("Pas d'embedding"));
-                            } else {
-                                qDebug() << "[FaceWorker] enrolement -> backend :"
-                                         << "userId=" << enrollUserId
-                                         << "poses=" << embeddingsMap.keys()
-                                         << "samples=" << totalSamples;
-                                // Emit -> AppController POST /face/enroll
-                                // Le enrollFinished sera emit depuis setEnrollResult
-                                // apres reponse REST.
-                                emit enrollEmbeddingsReady(enrollUserId, embeddingsMap);
-                            }
-                        }
-                    }
+                    // (finalize traite au top du loop, hors detection,
+                    //  pour fonctionner meme sans visage dans ROI)
                 } else {
                     // ── Mode détection — envoi embedding au backend ────────────
                     // (Pas de match local : la DB est cote serveur, le backend
