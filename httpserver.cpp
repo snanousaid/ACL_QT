@@ -1,4 +1,5 @@
 #include "httpserver.h"
+#include "appcontroller.h"
 
 #include <QTcpSocket>
 #include <QNetworkAccessManager>
@@ -7,10 +8,13 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QJsonValue>
 #include <QHostAddress>
 #include <QDebug>
 #include <QMutexLocker>
 #include <QPointer>
+#include <QBuffer>
+#include <QDateTime>
 
 #ifdef ACL_OPENCV_ENABLED
 #include <opencv2/imgcodecs.hpp>
@@ -89,12 +93,22 @@ namespace {
 
 HttpServer::HttpServer(const QString &modelsDir,
                        const QString &controllerUrl,
+                       AppController *controller,
                        QObject *parent)
     : QTcpServer(parent),
       m_modelsDir(modelsDir),
-      m_controllerUrl(controllerUrl)
+      m_controllerUrl(controllerUrl),
+      m_controller(controller)
 {
     m_nam = new QNetworkAccessManager(this);
+    if (m_controller) {
+        // Branche le stream MJPEG sur les frames de la camera.
+        // QueuedConnection : la frame est forwardee depuis le thread camera,
+        // on veut traiter l'encodage JPEG dans le main thread.
+        connect(m_controller, &AppController::frameReady,
+                this,         &HttpServer::onFrameReady,
+                Qt::QueuedConnection);
+    }
 }
 
 HttpServer::~HttpServer() = default;
@@ -114,6 +128,85 @@ bool HttpServer::start(quint16 port)
 void HttpServer::incomingConnection(qintptr socketDescriptor)
 {
     new HttpConnection(socketDescriptor, this);
+}
+
+void HttpServer::registerStreamClient(QTcpSocket *sock)
+{
+    if (!sock) return;
+    m_streamClients.append(QPointer<QTcpSocket>(sock));
+
+    // Si on a une frame en cache, envoie tout de suite pour eviter un ecran
+    // noir le temps de la prochaine frame.
+    if (!m_lastFrameJpeg.isEmpty() && sock->state() == QAbstractSocket::ConnectedState) {
+        QByteArray part;
+        part += "--frame\r\n";
+        part += "Content-Type: image/jpeg\r\n";
+        part += "Content-Length: " + QByteArray::number(m_lastFrameJpeg.size()) + "\r\n\r\n";
+        sock->write(part);
+        sock->write(m_lastFrameJpeg);
+        sock->write("\r\n");
+        sock->flush();
+    }
+
+    qDebug() << "[HttpServer] stream client connecte —"
+             << m_streamClients.size() << "clients actifs";
+
+    // Cleanup auto a la deconnexion
+    connect(sock, &QTcpSocket::disconnected, this, [this, sock] {
+        for (int i = m_streamClients.size() - 1; i >= 0; --i) {
+            if (m_streamClients[i].isNull() || m_streamClients[i].data() == sock)
+                m_streamClients.removeAt(i);
+        }
+        sock->deleteLater();
+        qDebug() << "[HttpServer] stream client deconnecte —"
+                 << m_streamClients.size() << "clients restants";
+    });
+}
+
+void HttpServer::onFrameReady(const QImage &img)
+{
+    if (img.isNull()) return;
+
+    // Rate-limit : on n'envoie pas plus vite que ~15 FPS aux clients web pour
+    // economiser bande passante (le live enrollment n'a pas besoin de 30 FPS).
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (nowMs - m_lastFrameMs < 66) return;  // ~15 FPS max
+    m_lastFrameMs = nowMs;
+
+    if (m_streamClients.isEmpty()) return;
+
+    // Encode JPEG (qualité 75 — compromis taille/qualité pour LAN web)
+    QByteArray jpeg;
+    {
+        QBuffer buf(&jpeg);
+        buf.open(QIODevice::WriteOnly);
+        img.save(&buf, "JPEG", 75);
+    }
+    if (jpeg.isEmpty()) return;
+    m_lastFrameJpeg = jpeg;
+
+    QByteArray head;
+    head += "--frame\r\n";
+    head += "Content-Type: image/jpeg\r\n";
+    head += "Content-Length: " + QByteArray::number(jpeg.size()) + "\r\n\r\n";
+
+    for (int i = m_streamClients.size() - 1; i >= 0; --i) {
+        QPointer<QTcpSocket> &sp = m_streamClients[i];
+        if (sp.isNull()) {
+            m_streamClients.removeAt(i);
+            continue;
+        }
+        QTcpSocket *s = sp.data();
+        if (s->state() != QAbstractSocket::ConnectedState) {
+            m_streamClients.removeAt(i);
+            s->deleteLater();
+            continue;
+        }
+        s->write(head);
+        s->write(jpeg);
+        s->write("\r\n");
+        // Pas de flush ici : Qt batchera automatiquement, evite syscalls
+    }
 }
 
 bool HttpServer::loadModels()
@@ -261,20 +354,124 @@ void HttpConnection::route()
     qDebug() << "[HttpServer]" << m_method << m_path
              << "body=" << m_body.size() << "octets";
 
-    if (m_method == "GET" && m_path == "/health") {
-        handleHealth();
-        return;
-    }
-    if (m_method == "POST" && m_path == "/enroll-from-images") {
-        handleEnrollFromImages();
-        return;
-    }
+    if (m_method == "GET"  && m_path == "/health")              { handleHealth(); return; }
+    if (m_method == "POST" && m_path == "/enroll-from-images")  { handleEnrollFromImages(); return; }
+    if (m_method == "GET"  && m_path == "/stream")              { handleStream(); return; }
+    if (m_method == "POST" && m_path == "/enroll/start")        { handleEnrollStart(); return; }
+    if (m_method == "GET"  && m_path == "/enroll/status")       { handleEnrollStatus(); return; }
+    if (m_method == "POST" && m_path == "/enroll/finalize")     { handleEnrollFinalize(); return; }
+    if (m_method == "POST" && m_path == "/enroll/cancel")       { handleEnrollCancel(); return; }
     writeJsonError(404, "Not found");
 }
 
 void HttpConnection::handleHealth()
 {
     writeResponse(200, "{\"status\":\"ok\"}");
+}
+
+// ── Stream MJPEG ───────────────────────────────────────────────────────────
+// Le socket reste ouvert ; HttpServer pousse chaque nouvelle frame en y
+// ecrivant un nouveau "part" multipart. On transfere le socket au server
+// (la HttpConnection s'auto-detruit, le socket lui survit).
+void HttpConnection::handleStream()
+{
+    if (!m_socket || m_socket->state() != QAbstractSocket::ConnectedState) {
+        deleteLater();
+        return;
+    }
+    QByteArray head;
+    head += "HTTP/1.1 200 OK\r\n";
+    head += "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n";
+    head += "Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n";
+    head += "Pragma: no-cache\r\n";
+    head += "Access-Control-Allow-Origin: *\r\n";
+    head += "Connection: close\r\n\r\n";
+    m_socket->write(head);
+    m_socket->flush();
+
+    // Detache le socket de la connection : on coupe les signaux readyRead /
+    // disconnected pour eviter que ce HttpConnection traite encore quelque
+    // chose, et on confie le socket a HttpServer.
+    disconnect(m_socket, nullptr, this, nullptr);
+    QTcpSocket *sock = m_socket;
+    m_socket = nullptr;
+    sock->setParent(m_server);
+    m_server->registerStreamClient(sock);
+
+    deleteLater();
+}
+
+// ── Enroll control (proxy vers AppController) ──────────────────────────────
+void HttpConnection::handleEnrollStart()
+{
+    if (!m_server->m_controller) {
+        writeJsonError(500, "AppController non disponible");
+        return;
+    }
+    const auto doc = QJsonDocument::fromJson(m_body);
+    if (!doc.isObject()) {
+        writeJsonError(400, "JSON body invalide");
+        return;
+    }
+    const QString userId = doc.object().value("userId").toString().trimmed();
+    int samples = doc.object().value("samplesPerPose").toInt(10);
+    if (userId.isEmpty()) {
+        writeJsonError(400, "userId manquant");
+        return;
+    }
+    if (samples < 1)  samples = 1;
+    if (samples > 30) samples = 30;
+
+    // Invocation cross-thread safe (AppController est sur le main thread,
+    // on est aussi sur le main thread donc direct call OK).
+    QMetaObject::invokeMethod(m_server->m_controller.data(), "startEnroll",
+                              Qt::QueuedConnection,
+                              Q_ARG(QString, userId),
+                              Q_ARG(int, samples));
+
+    QJsonObject out{
+        {"started", true},
+        {"userId", userId},
+        {"samplesPerPose", samples},
+    };
+    writeResponse(200, QJsonDocument(out).toJson(QJsonDocument::Compact));
+}
+
+void HttpConnection::handleEnrollStatus()
+{
+    QJsonObject out;
+    if (m_server->m_controller) {
+        const QVariantMap status = m_server->m_controller->lastEnrollStatus();
+        const QVariantMap result = m_server->m_controller->lastEnrollResult();
+        out["status"] = QJsonValue::fromVariant(status);
+        out["result"] = QJsonValue::fromVariant(result);
+    } else {
+        out["status"] = QJsonObject{};
+        out["result"] = QJsonObject{};
+    }
+    writeResponse(200, QJsonDocument(out).toJson(QJsonDocument::Compact));
+}
+
+void HttpConnection::handleEnrollFinalize()
+{
+    if (!m_server->m_controller) {
+        writeJsonError(500, "AppController non disponible");
+        return;
+    }
+    QMetaObject::invokeMethod(m_server->m_controller.data(), "finalizeEnroll",
+                              Qt::QueuedConnection);
+    writeResponse(200, "{\"finalize\":\"requested\"}");
+}
+
+void HttpConnection::handleEnrollCancel()
+{
+    if (!m_server->m_controller) {
+        writeJsonError(500, "AppController non disponible");
+        return;
+    }
+    QMetaObject::invokeMethod(m_server->m_controller.data(), "cancelEnroll",
+                              Qt::QueuedConnection);
+    writeResponse(200, "{\"cancel\":\"requested\"}");
 }
 
 // ── Multipart parser minimaliste ────────────────────────────────────────────

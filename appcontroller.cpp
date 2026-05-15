@@ -193,6 +193,12 @@ void AppController::onCamEnrollProgress(const QVariantMap &status)
 void AppController::onCamEnrollFinished(bool ok, const QString &msg)
 {
     m_lastEnrollStatus.clear();
+    m_lastEnrollResult = QVariantMap{
+        {QStringLiteral("op"), QStringLiteral("finalize")},
+        {QStringLiteral("ok"), ok},
+        {QStringLiteral("msg"), msg},
+        {QStringLiteral("ts"), QDateTime::currentMSecsSinceEpoch()},
+    };
     emit enrollResult(QStringLiteral("finalize"), ok, msg);
     if (ok) emit faceProfileMutated(QStringLiteral("enroll"), QString());
 }
@@ -378,6 +384,12 @@ void AppController::deleteFaceProfile(const QString &userId)
 void AppController::startEnroll(const QString &userId, int samplesPerPose)
 {
     m_face->startEnroll(userId, samplesPerPose);
+    m_lastEnrollResult = QVariantMap{
+        {QStringLiteral("op"), QStringLiteral("start")},
+        {QStringLiteral("ok"), true},
+        {QStringLiteral("msg"), QStringLiteral("Enrolement demarre")},
+        {QStringLiteral("ts"), QDateTime::currentMSecsSinceEpoch()},
+    };
     emit enrollResult(QStringLiteral("start"), true, QStringLiteral("Enrolement demarre"));
 }
 
@@ -389,6 +401,12 @@ void AppController::finalizeEnroll()
 void AppController::cancelEnroll()
 {
     m_face->cancelEnroll();
+    m_lastEnrollResult = QVariantMap{
+        {QStringLiteral("op"), QStringLiteral("cancel")},
+        {QStringLiteral("ok"), true},
+        {QStringLiteral("msg"), QStringLiteral("annulé")},
+        {QStringLiteral("ts"), QDateTime::currentMSecsSinceEpoch()},
+    };
     emit enrollResult(QStringLiteral("cancel"), true, QStringLiteral("annulé"));
 }
 

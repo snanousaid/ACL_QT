@@ -45,12 +45,21 @@ int main(int argc, char *argv[])
                      ctrl,        &AppController::screenTapped);
 
     // ── Serveur HTTP pour enrôlement web (ACL_133_FRONT) ─────────────────────
-    // Port 9090. Endpoints v1 : GET /health, POST /enroll-from-images.
-    // Le serveur charge ses propres modèles YuNet+SFace (indépendant du
-    // FaceWorker pour ne pas perturber le pipeline live).
+    // Port 9090. Endpoints :
+    //   GET  /health
+    //   POST /enroll-from-images   (upload multi-images + auto-classify pose)
+    //   GET  /stream               (MJPEG live)
+    //   POST /enroll/start         (drive FaceWorker)
+    //   GET  /enroll/status        (poll)
+    //   POST /enroll/finalize | /cancel
+    //
+    // Upload : modeles YuNet+SFace dedies dans HttpServer.
+    // Live  : drive le FaceWorker existant via AppController (reutilise toute
+    //         la logique kiosque : pose estimation, quality filters, sampling).
     HttpServer *httpServer = new HttpServer(
         QStringLiteral("/opt/ACL_qt/models"),
         QStringLiteral("http://localhost:80/api/v2"),
+        ctrl,
         &app);
     if (!httpServer->start(9090)) {
         qWarning() << "[main] HttpServer KO — enrôlement web indisponible";

@@ -53,18 +53,43 @@ Périmètre pour cette branche : **uniquement l'ajout Face ID**. Autres amélior
 
 ---
 
-## Endpoints du serveur Qt — v1
+## Endpoints du serveur Qt
 
-Port choisi : **9090**.
+Port : **9090**. v1 (upload) et v2 (live) sont tous deux implémentés.
 
-**Scope v1 : upload seul.** Le mode live (stream MJPEG) est repoussé en v2.
+| Méthode | Route | Body | Réponse |
+|---|---|---|---|
+| `GET`  | `/health` | — | `200 {status:"ok"}` |
+| `POST` | `/enroll-from-images` | `multipart` : `userId`, `images[]` (1 à 20) | `200 {profileId, isUpdate, poses:{center:N,...}}` |
+| `GET`  | `/stream` | — | `multipart/x-mixed-replace; boundary=frame` (MJPEG) |
+| `POST` | `/enroll/start` | JSON `{userId, samplesPerPose}` | `200 {started, userId, samplesPerPose}` |
+| `GET`  | `/enroll/status` | — | `200 {status:{...}, result:{op, ok, msg, ts}}` |
+| `POST` | `/enroll/finalize` | — | `200 {finalize:"requested"}` |
+| `POST` | `/enroll/cancel` | — | `200 {cancel:"requested"}` |
 
-| Méthode | Route | Body | Réponse | v1 ? |
-|---|---|---|---|---|
-| `GET`  | `/health` | — | `200 {status:"ok"}` | ✅ |
-| `POST` | `/enroll-from-images` | `multipart/form-data` : `userId`, `images[]` (1 à 20 fichiers) | `200 {profileId, isUpdate, poses:{center:N, left:N, ...}}` | ✅ |
-| `GET`  | `/stream` | — | `multipart/x-mixed-replace; boundary=frame` (MJPEG) | ⏳ v2 |
-| `POST` | `/extract-image` | `multipart/form-data` : `image=<file>` | `200 {embedding:[512 floats], score, faceBox}` | ⏳ v2 (utile pour live) |
+### Mode UPLOAD
+
+Multipart `images[]` (1–20). Pas de pose à fournir : Qt auto-classifie via
+landmarks YuNet (`classifyPose()` dans `httpserver.cpp`), groupe par pose,
+moyenne et POST `/face/enroll` côté backend.
+
+### Mode LIVE
+
+Le front pilote le FaceWorker existant via HTTP (zéro duplication) :
+
+1. `<img src="/stream">` côté web — Qt diffuse les frames camera en MJPEG
+   (~15 FPS, JPEG q=75)
+2. `POST /enroll/start` → `AppController::startEnroll(userId, samplesPerPose)`
+   → le kiosque entre en mode enrollment, même comportement que dans QML
+3. Le front poll `GET /enroll/status` toutes les ~300 ms pour la progression
+   par pose (count/target, pose courante, message du worker)
+4. Quand `enroll_complete=true`, le front affiche un bouton "Valider"
+5. `POST /enroll/finalize` → finalize côté FaceWorker → embeddings moyennés
+   par pose → POST backend `/face/enroll` → résultat persisté dans
+   `lastEnrollResult` (lu par le polling)
+6. `POST /enroll/cancel` à tout moment pour abandonner.
+
+Le kiosque QML voit aussi l'enrôlement en cours (même `FaceWorker`).
 
 ### Comportement `/enroll-from-images` (v1)
 

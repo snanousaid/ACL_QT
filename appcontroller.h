@@ -50,6 +50,11 @@ public:
     Q_INVOKABLE void cancelEnroll();
     Q_INVOKABLE void pollEnrollStatus();
 
+    // Accesseurs utilisés par HttpServer (polling enrollment depuis web).
+    // Renvoient une copie snapshot — appelables depuis le main thread.
+    QVariantMap lastEnrollStatus() const { return m_lastEnrollStatus; }
+    QVariantMap lastEnrollResult() const { return m_lastEnrollResult; }
+
     // ── Config réseau (REST → m_controllerUrl) ──────────────────────────────
     Q_INVOKABLE void getNetworkInfo();
     Q_INVOKABLE void scanWifi();
@@ -124,4 +129,7 @@ private:
 
     // Dernier statut enrollment pour pollEnrollStatus()
     QVariantMap m_lastEnrollStatus;
+    // Dernier resultat de finalize/start/cancel pour polling HTTP cote web.
+    // Cle 'op' = start|finalize|cancel ; 'ok' = bool ; 'msg' = str ; 'ts' = ms.
+    QVariantMap m_lastEnrollResult;
 };

@@ -2,6 +2,8 @@
 #include <QObject>
 #include <QTcpServer>
 #include <QMutex>
+#include <QPointer>
+#include <QImage>
 
 #ifdef ACL_OPENCV_ENABLED
 #include <opencv2/core.hpp>
@@ -11,20 +13,25 @@
 class QTcpSocket;
 class QNetworkAccessManager;
 class QNetworkReply;
+class AppController;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HttpServer — mini-serveur HTTP intégré au process Qt, pour permettre au
-// dashboard web ACL_133_FRONT d'enrôler des visages via upload d'images.
+// dashboard web ACL_133_FRONT d'enrôler des visages.
 //
-// Endpoints (v1) :
+// Endpoints :
 //   GET  /health
-//   POST /enroll-from-images  multipart/form-data : userId + images_<pose>[]
+//   POST /enroll-from-images  multipart/form-data : userId + images[]
 //
-// Le serveur charge ses PROPRES instances YuNet + SFace (pas de partage avec
-// FaceWorker pour éviter mutex/contention sur le pipeline live). Les modèles
-// sont chargés à la première requête nécessitant détection.
+//   ── Mode live (v2) ──
+//   GET  /stream                  multipart MJPEG (camera)
+//   POST /enroll/start            JSON {userId, samplesPerPose}
+//   GET  /enroll/status           JSON {status, result}
+//   POST /enroll/finalize         (vide)
+//   POST /enroll/cancel           (vide)
 //
-// Après extraction, POST /face/enroll directement vers acl_controller.
+// Pour l'upload, le serveur charge ses propres instances YuNet+SFace.
+// Pour le live, il drive le FaceWorker existant via AppController.
 // ─────────────────────────────────────────────────────────────────────────────
 class HttpServer : public QTcpServer
 {
@@ -32,6 +39,7 @@ class HttpServer : public QTcpServer
 public:
     explicit HttpServer(const QString &modelsDir,
                         const QString &controllerUrl,
+                        AppController *controller,
                         QObject *parent = nullptr);
     ~HttpServer() override;
 
@@ -40,9 +48,14 @@ public:
 protected:
     void incomingConnection(qintptr socketDescriptor) override;
 
+private slots:
+    // Diffusion d'une nouvelle frame caméra à tous les clients /stream connectés.
+    void onFrameReady(const QImage &img);
+
 private:
     QString m_modelsDir;
     QString m_controllerUrl;
+    QPointer<AppController> m_controller;
     QNetworkAccessManager *m_nam;
 
     QMutex m_cvMutex;
@@ -52,6 +65,14 @@ private:
 #endif
     bool m_modelsLoaded = false;
     bool loadModels();
+
+    // Liste des sockets en streaming MJPEG (long-poll).
+    // QPointer pour gestion auto si client deconnecte.
+    QList<QPointer<QTcpSocket>> m_streamClients;
+    QByteArray m_lastFrameJpeg;
+    qint64     m_lastFrameMs = 0;
+
+    void registerStreamClient(QTcpSocket *sock);
 
     friend class HttpConnection;
 };
@@ -93,6 +114,11 @@ private:
 
     void handleHealth();
     void handleEnrollFromImages();
+    void handleStream();
+    void handleEnrollStart();
+    void handleEnrollStatus();
+    void handleEnrollFinalize();
+    void handleEnrollCancel();
 
     QByteArray extractAuthHeader() const;
 };
