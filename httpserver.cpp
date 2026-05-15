@@ -354,6 +354,15 @@ void HttpConnection::route()
     qDebug() << "[HttpServer]" << m_method << m_path
              << "body=" << m_body.size() << "octets";
 
+    // ── CORS preflight ────────────────────────────────────────────────────
+    // Tous les POST avec Content-Type: application/json declenchent un
+    // OPTIONS preflight. On repond 204 avec les memes CORS headers que
+    // writeResponse() ajoute pour les vraies reponses.
+    if (m_method == "OPTIONS") {
+        writeResponse(204, QByteArray(), "text/plain");
+        return;
+    }
+
     if (m_method == "GET"  && m_path == "/health")              { handleHealth(); return; }
     if (m_method == "POST" && m_path == "/enroll-from-images")  { handleEnrollFromImages(); return; }
     if (m_method == "GET"  && m_path == "/stream")              { handleStream(); return; }
@@ -765,7 +774,8 @@ void HttpConnection::writeResponse(int status, const QByteArray &body,
         return;
     }
     static const QMap<int, QByteArray> reasons = {
-        {200, "OK"}, {400, "Bad Request"}, {404, "Not Found"},
+        {200, "OK"}, {204, "No Content"},
+        {400, "Bad Request"}, {404, "Not Found"},
         {411, "Length Required"}, {413, "Payload Too Large"},
         {422, "Unprocessable Entity"}, {431, "Request Header Fields Too Large"},
         {500, "Internal Server Error"}, {501, "Not Implemented"},
