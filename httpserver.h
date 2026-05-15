@@ -4,6 +4,8 @@
 #include <QMutex>
 #include <QPointer>
 #include <QImage>
+#include <QHash>
+#include <functional>
 
 #ifdef ACL_OPENCV_ENABLED
 #include <opencv2/core.hpp>
@@ -74,6 +76,18 @@ private:
 
     void registerStreamClient(QTcpSocket *sock);
 
+    // ── Auth JWT — verification au backend avec cache TTL ────────────────
+    QMutex m_tokenCacheMutex;
+    QHash<QByteArray, qint64> m_tokenCache;  // token -> ts d'expiration (ms)
+    static constexpr qint64 TOKEN_CACHE_TTL_MS = 60 * 1000;
+
+    bool isTokenCached(const QByteArray &token);
+    void cacheToken(const QByteArray &token);
+    // Verifie un token via GET /auth/me. Callback invoque sur main thread.
+    void verifyTokenAsync(const QByteArray &token,
+                          QObject *context,
+                          std::function<void(bool)> cb);
+
     friend class HttpConnection;
 };
 
@@ -97,6 +111,8 @@ private:
     State    m_state = State::ReadingHeaders;
     QString  m_method;
     QString  m_path;
+    QByteArray m_query;      // query string (sans '?')
+    QByteArray m_authHeader; // valeur brute du header Authorization
     QByteArray m_contentType;
     int      m_contentLength = 0;
     QByteArray m_body;
@@ -107,6 +123,7 @@ private:
     bool parseRequestLine(const QByteArray &line);
     void parseHeaderLine(const QByteArray &line);
     void route();
+    void dispatch();   // routing post-auth
 
     void writeResponse(int status, const QByteArray &body,
                        const QByteArray &contentType = "application/json");
@@ -121,4 +138,6 @@ private:
     void handleEnrollCancel();
 
     QByteArray extractAuthHeader() const;
+    // Token JWT depuis header Authorization OU query ?token=
+    QByteArray extractToken() const;
 };

@@ -163,6 +163,57 @@ void HttpServer::registerStreamClient(QTcpSocket *sock)
     });
 }
 
+// ── Auth helpers ───────────────────────────────────────────────────────────
+
+bool HttpServer::isTokenCached(const QByteArray &token)
+{
+    QMutexLocker l(&m_tokenCacheMutex);
+    const auto it = m_tokenCache.find(token);
+    if (it == m_tokenCache.end()) return false;
+    if (it.value() < QDateTime::currentMSecsSinceEpoch()) {
+        m_tokenCache.erase(it);
+        return false;
+    }
+    return true;
+}
+
+void HttpServer::cacheToken(const QByteArray &token)
+{
+    QMutexLocker l(&m_tokenCacheMutex);
+    m_tokenCache.insert(token,
+        QDateTime::currentMSecsSinceEpoch() + TOKEN_CACHE_TTL_MS);
+    // Cleanup opportuniste si le cache grossit
+    if (m_tokenCache.size() > 50) {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        for (auto it = m_tokenCache.begin(); it != m_tokenCache.end(); ) {
+            if (it.value() < now) it = m_tokenCache.erase(it);
+            else                  ++it;
+        }
+    }
+}
+
+void HttpServer::verifyTokenAsync(const QByteArray &token,
+                                  QObject *context,
+                                  std::function<void(bool)> cb)
+{
+    QNetworkRequest req(QUrl(m_controllerUrl + QStringLiteral("/auth/me")));
+    req.setRawHeader("Authorization", "Bearer " + token);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    req.setTransferTimeout(5000);
+#endif
+    QNetworkReply *reply = m_nam->get(req);
+    QPointer<QObject> safeCtx(context);
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, token, safeCtx, cb] {
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const auto err = reply->error();
+        reply->deleteLater();
+        const bool ok = (err == QNetworkReply::NoError) && (http >= 200 && http < 300);
+        if (ok) cacheToken(token);
+        if (safeCtx) cb(ok);
+    });
+}
+
 void HttpServer::onFrameReady(const QImage &img)
 {
     if (img.isNull()) return;
@@ -324,7 +375,14 @@ bool HttpConnection::parseRequestLine(const QByteArray &line)
     const QList<QByteArray> parts = line.split(' ');
     if (parts.size() < 3) return false;
     m_method = QString::fromLatin1(parts[0]);
-    m_path   = QString::fromLatin1(parts[1]);
+    QByteArray pathRaw = parts[1];
+    // Split path / query
+    const int q = pathRaw.indexOf('?');
+    if (q >= 0) {
+        m_query = pathRaw.mid(q + 1);
+        pathRaw = pathRaw.left(q);
+    }
+    m_path = QString::fromLatin1(pathRaw);
     return true;
 }
 
@@ -338,13 +396,33 @@ void HttpConnection::parseHeaderLine(const QByteArray &line)
         m_contentLength = val.toInt();
     } else if (key == "content-type") {
         m_contentType = val;
+    } else if (key == "authorization") {
+        m_authHeader = val;
     }
 }
 
 QByteArray HttpConnection::extractAuthHeader() const
 {
-    // Pas exposé dans MVP : la front n'envoie pas de token, le backend laisse
-    // /face/enroll passer (admin LAN). Stub pour évolution future.
+    return m_authHeader;
+}
+
+// Extrait le JWT depuis 'Authorization: Bearer xxx' OU '?token=xxx' query.
+QByteArray HttpConnection::extractToken() const
+{
+    if (!m_authHeader.isEmpty()) {
+        const QByteArray lower = m_authHeader.toLower();
+        if (lower.startsWith("bearer ")) {
+            return m_authHeader.mid(7).trimmed();
+        }
+    }
+    if (!m_query.isEmpty()) {
+        const auto parts = m_query.split('&');
+        for (const auto &p : parts) {
+            if (p.startsWith("token=")) {
+                return p.mid(6);
+            }
+        }
+    }
     return {};
 }
 
@@ -354,15 +432,41 @@ void HttpConnection::route()
              << "body=" << m_body.size() << "octets";
 
     // ── CORS preflight ────────────────────────────────────────────────────
-    // Tous les POST avec Content-Type: application/json declenchent un
-    // OPTIONS preflight. On repond 204 avec les memes CORS headers que
-    // writeResponse() ajoute pour les vraies reponses.
     if (m_method == "OPTIONS") {
         writeResponse(204, QByteArray(), "text/plain");
         return;
     }
 
-    if (m_method == "GET"  && m_path == "/health")              { handleHealth(); return; }
+    // ── /health : pas d'auth (ping de disponibilite) ──────────────────────
+    if (m_method == "GET" && m_path == "/health") {
+        handleHealth();
+        return;
+    }
+
+    // ── Auth JWT (forward au backend, cache 60s) ──────────────────────────
+    const QByteArray token = extractToken();
+    if (token.isEmpty()) {
+        writeJsonError(401, "Missing token");
+        return;
+    }
+    if (m_server->isTokenCached(token)) {
+        dispatch();
+        return;
+    }
+    // Async : appel backend /auth/me, dispatch dans la callback si OK
+    QPointer<HttpConnection> self(this);
+    m_server->verifyTokenAsync(token, this, [self](bool ok) {
+        if (!self) return;
+        if (!ok) {
+            self->writeJsonError(401, "Invalid token");
+            return;
+        }
+        self->dispatch();
+    });
+}
+
+void HttpConnection::dispatch()
+{
     if (m_method == "POST" && m_path == "/enroll-from-images")  { handleEnrollFromImages(); return; }
     if (m_method == "GET"  && m_path == "/stream")              { handleStream(); return; }
     if (m_method == "POST" && m_path == "/enroll/start")        { handleEnrollStart(); return; }

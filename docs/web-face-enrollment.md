@@ -190,10 +190,21 @@ Toutes en `feat/web-face-enroll` :
 
 - ✅ Port Qt HTTP : **9090**
 - ✅ Endpoint groupé `/enroll-from-images` (1 appel, Qt POSTe au backend en interne)
-- ✅ Multi-pose en une requête multipart unique (5 champs `images_<pose>`)
-- ✅ Scope v1 : **upload seulement**. Live (stream MJPEG) repoussé en v2.
-- ✅ Sécurité : aucune en v1 (LAN privé)
+- ✅ Upload : champ unique `images[]`, auto-classification par pose côté Qt
+- ✅ Live : drive `FaceWorker` existant via `/enroll/{start,status,finalize,cancel}` + `/stream` MJPEG
+- ✅ Sécurité : **JWT** forward au backend `/auth/me` (cache 60s), token en header `Authorization: Bearer xxx` ou query `?token=xxx` pour `/stream` (balise `<img>`)
 - ✅ Routage : front dérive URL Qt depuis `VITE_API_URL` (même host, port 9090)
+
+## Authentification
+
+Toutes les routes sauf `/health` exigent un JWT valide.
+
+- **Sources acceptées** : header `Authorization: Bearer <jwt>` OU query `?token=<jwt>`
+- **Vérification** : Qt fait `GET /auth/me` sur acl_controller avec le JWT.
+  - 200 OK → token valide, mis en cache 60 s (évite de spammer le backend
+    pendant les polls `/enroll/status` toutes les 300 ms)
+  - 4xx → réponse 401 vers le front
+- **CORS** : reste ouvert (`*`) — la sécurité repose sur le JWT, pas l'origin
 
 ---
 
