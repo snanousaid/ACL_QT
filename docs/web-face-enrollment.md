@@ -62,26 +62,40 @@ Port choisi : **9090**.
 | Méthode | Route | Body | Réponse | v1 ? |
 |---|---|---|---|---|
 | `GET`  | `/health` | — | `200 {status:"ok"}` | ✅ |
-| `POST` | `/enroll-from-images` | `multipart/form-data` : `userId`, `images_<pose>[]` (5 champs, un par pose) | `200 {profileId, isUpdate, poses:{center:N, left:N, ...}}` | ✅ |
+| `POST` | `/enroll-from-images` | `multipart/form-data` : `userId`, `images[]` (1 à 20 fichiers) | `200 {profileId, isUpdate, poses:{center:N, left:N, ...}}` | ✅ |
 | `GET`  | `/stream` | — | `multipart/x-mixed-replace; boundary=frame` (MJPEG) | ⏳ v2 |
 | `POST` | `/extract-image` | `multipart/form-data` : `image=<file>` | `200 {embedding:[512 floats], score, faceBox}` | ⏳ v2 (utile pour live) |
 
 ### Comportement `/enroll-from-images` (v1)
 
-Pour chaque pose reçue :
-- Le champ multipart attendu est `images_<pose>` (ex. `images_center`, `images_left`, …). 1 à 20 fichiers par pose.
-- Pour chaque pose, Qt extrait l'embedding 512-D de chaque image (YuNet + SFace).
-- Si plusieurs images pour une pose → **moyenne** des embeddings (anti-bruit).
-- Si aucune face détectée pour une image → l'image est ignorée, on log.
-- Si aucune image valide pour une pose → la pose est exclue du payload final.
+**Le front n'envoie qu'un champ unique `images`** (1 à 20 fichiers). Qt
+auto-classifie chaque image par pose via les landmarks YuNet (même logique
+que l'enrôlement live, fonction `classifyPose()` dans `httpserver.cpp`).
 
-Qt POST ensuite directement à `acl_controller` : `POST /face/enroll` avec `{ userId, embeddings: { pose: vector[512] } }` (auth JWT propagé via header passé par le front).
+Pour chaque image reçue :
+- YuNet détecte le visage (rejet si aucun visage valide).
+- Estimation de la pose (yaw/pitch via landmarks) → `center` / `left` /
+  `right` / `up` / `down`. Les images ambiguës tombent dans `center`.
+- SFace extrait l'embedding 512-D.
 
-Renvoie au front : `{ profileId, isUpdate, poses: { center: N, left: N, ... } }` où `N` = nombre d'images valides retenues.
+Ensuite, par pose détectée :
+- **Moyenne** des embeddings + normalisation L2.
+- Le résultat `{ pose → vector[512] }` est POSTé à `acl_controller`
+  `POST /face/enroll`.
+
+Champ legacy `images_<pose>` toujours accepté (compat avec une future v2 où
+le mode live pourra forcer la pose côté front sans auto-classification).
+
+Renvoie au front : `{ profileId, isUpdate, poses: { center: N, left: N, ... } }`
+où `N` = nombre d'images valides retenues pour cette pose.
 
 ### Mode v1 côté web
 
-- **Upload multi-pose** : l'admin choisit 1 à 20 images par pose. Front envoie tout dans une seule requête `multipart/form-data` à `POST /enroll-from-images`. L'admin doit avoir minimum **2 poses** avec au moins 1 image valide pour valider.
+- **Upload unique** : l'admin glisse-dépose entre 1 et 20 images dans une
+  seule zone (pas de sélection de pose). Front envoie tout dans une seule
+  requête `multipart/form-data` à `POST /enroll-from-images`.
+- Minimum 1 image valide (avec visage détecté) pour valider — sinon `422`.
+- Maximum 20 images par enrôlement (rejet `413` côté Qt).
 
 ---
 

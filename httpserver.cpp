@@ -51,6 +51,35 @@ namespace {
         }
         return idx;
     }
+
+    // Auto-classification pose depuis landmarks YuNet — meme logique que
+    // faceworker.cpp::estimatePose(). Utilisee pour l'upload web : le front
+    // n'envoie qu'un seul lot d'images, Qt repartit par pose.
+    // Retourne "center" pour les images transitionnelles ou ambigues (au lieu
+    // de "transition") puisque pour l'upload on veut toujours garder l'image.
+    QString classifyPose(const cv::Mat &face)
+    {
+        float rex = face.at<float>(0, 4),  rey = face.at<float>(0, 5);
+        float lex = face.at<float>(0, 6),  ley = face.at<float>(0, 7);
+        float nx  = face.at<float>(0, 8),  ny  = face.at<float>(0, 9);
+        float rmy = face.at<float>(0, 11), lmy = face.at<float>(0, 13);
+
+        float eye_cx    = (rex + lex) / 2.0f;
+        float eye_cy    = (rey + ley) / 2.0f;
+        float mouth_cy  = (rmy + lmy) / 2.0f;
+        float inter_eye = std::max(std::abs(lex - rex), 1.0f);
+
+        float yaw   = (nx - eye_cx) / inter_eye;
+        float em    = mouth_cy - eye_cy;
+        float pitch = (em > 1.0f) ? ((ny - eye_cy) / em - 0.5f) : 0.0f;
+
+        if (yaw   < -0.30f && std::abs(pitch) < 0.20f) return QStringLiteral("left");
+        if (yaw   >  0.30f && std::abs(pitch) < 0.20f) return QStringLiteral("right");
+        if (pitch < -0.06f && std::abs(yaw)   < 0.30f) return QStringLiteral("up");
+        if (pitch >  0.08f && std::abs(yaw)   < 0.30f) return QStringLiteral("down");
+        // center par defaut (englobe "transition" pour l'upload)
+        return QStringLiteral("center");
+    }
 #endif
 }
 
@@ -339,13 +368,19 @@ void HttpConnection::handleEnrollFromImages()
         return;
     }
 
-    // ── Lookup userId + collecte images par pose ──────────────────────────
+    // ── Lookup userId + collecte images (single field 'images') ───────────
+    // Le front n'envoie pas la pose : Qt auto-classifie via landmarks YuNet
+    // (cf. classifyPose() ci-dessus). On accepte aussi les anciens champs
+    // 'images_<pose>' au cas ou (compat live future v2).
     QString userId;
-    QMap<QString, QList<QByteArray>> imagesByPose;
+    QList<QByteArray> allImages;
+    QMap<QString, QList<QByteArray>> imagesByPose;  // si client fournit pose explicite
     for (const Part &p : parts) {
         const QString name = QString::fromLatin1(p.name);
         if (name == "userId") {
             userId = QString::fromUtf8(p.data).trimmed();
+        } else if (name == "images") {
+            allImages.append(p.data);
         } else if (name.startsWith("images_")) {
             const QString pose = name.mid(7);
             if (ACTIVE_POSES.contains(pose)) {
@@ -357,8 +392,12 @@ void HttpConnection::handleEnrollFromImages()
         writeJsonError(400, "userId manquant");
         return;
     }
-    if (imagesByPose.isEmpty()) {
+    if (allImages.isEmpty() && imagesByPose.isEmpty()) {
         writeJsonError(400, "Aucune image fournie");
+        return;
+    }
+    if (allImages.size() > 20) {
+        writeJsonError(413, "Max 20 images par enrolement");
         return;
     }
 
@@ -368,84 +407,101 @@ void HttpConnection::handleEnrollFromImages()
         return;
     }
 
-    // ── Extraction par image, moyenne par pose ────────────────────────────
-    QJsonObject embeddings;
-    QJsonObject poseCounts;
+    // ── Extraction par image + auto-classification par pose ──────────────
+    // Si le client a fourni 'images' (champ unique), on auto-classifie via
+    // landmarks YuNet. Si le client a fourni 'images_<pose>' (mode legacy /
+    // future v2 live), on respecte la pose fournie.
+    QMap<QString, QVector<QVector<float>>> binsByPose;
     int totalValid = 0;
+    int totalRejected = 0;
+
+    auto processImage = [&](const QByteArray &raw, const QString &forcedPose) {
+        std::vector<uchar> buf(reinterpret_cast<const uchar*>(raw.constData()),
+                               reinterpret_cast<const uchar*>(raw.constData()) + raw.size());
+        cv::Mat img;
+        try {
+            img = cv::imdecode(buf, cv::IMREAD_COLOR);
+        } catch (const cv::Exception &e) {
+            qWarning() << "[enroll-from-images] imdecode KO :" << e.what();
+            totalRejected++;
+            return;
+        }
+        if (img.empty()) {
+            qWarning() << "[enroll-from-images] image vide / format inconnu";
+            totalRejected++;
+            return;
+        }
+
+        cv::Mat faces;
+        try {
+            m_server->m_detector->setInputSize({img.cols, img.rows});
+            m_server->m_detector->detect(img, faces);
+        } catch (const cv::Exception &e) {
+            qWarning() << "[enroll-from-images] detect KO :" << e.what();
+            totalRejected++;
+            return;
+        }
+        if (faces.empty() || faces.rows == 0) {
+            qDebug() << "[enroll-from-images] aucun visage detecte";
+            totalRejected++;
+            return;
+        }
+        const int idx = bestFaceIdx(faces);
+        if (idx < 0) {
+            qDebug() << "[enroll-from-images] aucun visage valide";
+            totalRejected++;
+            return;
+        }
+
+        const cv::Mat best = faces.row(idx);
+        const QString pose = forcedPose.isEmpty() ? classifyPose(best) : forcedPose;
+
+        cv::Mat aligned, feat;
+        try {
+            m_server->m_recognizer->alignCrop(img, best, aligned);
+            m_server->m_recognizer->feature(aligned, feat);
+        } catch (const cv::Exception &e) {
+            qWarning() << "[enroll-from-images] feature KO :" << e.what();
+            totalRejected++;
+            return;
+        }
+
+        QVector<float> emb(static_cast<int>(feat.total()));
+        for (int i = 0; i < emb.size(); i++) emb[i] = feat.at<float>(i);
+        binsByPose[pose].append(emb);
+        totalValid++;
+    };
 
     {
         QMutexLocker l(&m_server->m_cvMutex);
-        cv::Mat aligned, feat;
-
+        // Mode upload (champ 'images') : auto-classification
+        for (const QByteArray &raw : allImages) processImage(raw, QString());
+        // Mode legacy / v2 live (champ 'images_<pose>') : pose forcee
         for (auto it = imagesByPose.constBegin(); it != imagesByPose.constEnd(); ++it) {
-            const QString &pose = it.key();
-            const QList<QByteArray> &imgs = it.value();
-
-            QVector<QVector<float>> embsForPose;
-            for (const QByteArray &raw : imgs) {
-                std::vector<uchar> buf(reinterpret_cast<const uchar*>(raw.constData()),
-                                       reinterpret_cast<const uchar*>(raw.constData()) + raw.size());
-                cv::Mat img;
-                try {
-                    img = cv::imdecode(buf, cv::IMREAD_COLOR);
-                } catch (const cv::Exception &e) {
-                    qWarning() << "[enroll-from-images] imdecode KO" << pose << ":" << e.what();
-                    continue;
-                }
-                if (img.empty()) {
-                    qWarning() << "[enroll-from-images] image vide / format inconnu, pose=" << pose;
-                    continue;
-                }
-
-                cv::Mat faces;
-                try {
-                    m_server->m_detector->setInputSize({img.cols, img.rows});
-                    m_server->m_detector->detect(img, faces);
-                } catch (const cv::Exception &e) {
-                    qWarning() << "[enroll-from-images] detect KO" << pose << ":" << e.what();
-                    continue;
-                }
-                if (faces.empty() || faces.rows == 0) {
-                    qDebug() << "[enroll-from-images] aucun visage detecte, pose=" << pose;
-                    continue;
-                }
-                const int idx = bestFaceIdx(faces);
-                if (idx < 0) {
-                    qDebug() << "[enroll-from-images] aucun visage valide, pose=" << pose;
-                    continue;
-                }
-                try {
-                    m_server->m_recognizer->alignCrop(img, faces.row(idx), aligned);
-                    m_server->m_recognizer->feature(aligned, feat);
-                } catch (const cv::Exception &e) {
-                    qWarning() << "[enroll-from-images] feature KO" << pose << ":" << e.what();
-                    continue;
-                }
-
-                QVector<float> emb(static_cast<int>(feat.total()));
-                for (int i = 0; i < emb.size(); i++) emb[i] = feat.at<float>(i);
-                embsForPose.append(emb);
-            }
-
-            if (embsForPose.isEmpty()) continue;
-
-            // Moyenne + normalisation L2
-            const int dim = embsForPose[0].size();
-            QVector<float> mean(dim, 0.0f);
-            for (const auto &v : embsForPose)
-                for (int i = 0; i < dim; i++) mean[i] += v[i];
-            for (float &x : mean) x /= embsForPose.size();
-            double norm = 0;
-            for (float x : mean) norm += x * x;
-            norm = std::sqrt(norm);
-            if (norm > 1e-9) for (float &x : mean) x /= static_cast<float>(norm);
-
-            QJsonArray arr;
-            for (float x : mean) arr.append(static_cast<double>(x));
-            embeddings[pose] = arr;
-            poseCounts[pose] = embsForPose.size();
-            totalValid += embsForPose.size();
+            for (const QByteArray &raw : it.value()) processImage(raw, it.key());
         }
+    }
+
+    // ── Moyenne + normalisation L2 par pose ───────────────────────────────
+    QJsonObject embeddings;
+    QJsonObject poseCounts;
+    for (auto it = binsByPose.constBegin(); it != binsByPose.constEnd(); ++it) {
+        const auto &samples = it.value();
+        if (samples.isEmpty()) continue;
+        const int dim = samples[0].size();
+        QVector<float> mean(dim, 0.0f);
+        for (const auto &v : samples)
+            for (int i = 0; i < dim; i++) mean[i] += v[i];
+        for (float &x : mean) x /= samples.size();
+        double norm = 0;
+        for (float x : mean) norm += x * x;
+        norm = std::sqrt(norm);
+        if (norm > 1e-9) for (float &x : mean) x /= static_cast<float>(norm);
+
+        QJsonArray arr;
+        for (float x : mean) arr.append(static_cast<double>(x));
+        embeddings[it.key()] = arr;
+        poseCounts[it.key()] = samples.size();
     }
 
     if (embeddings.isEmpty()) {
@@ -454,7 +510,8 @@ void HttpConnection::handleEnrollFromImages()
     }
     qDebug() << "[enroll-from-images] userId=" << userId
              << "poses=" << embeddings.keys()
-             << "samples valides=" << totalValid;
+             << "valides=" << totalValid
+             << "rejetees=" << totalRejected;
 
     // ── POST vers acl_controller /face/enroll ─────────────────────────────
     QJsonObject body;
