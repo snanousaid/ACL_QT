@@ -322,6 +322,12 @@ void HttpServer::onFrameReady(const QImage &img)
     head += "Content-Type: image/jpeg\r\n";
     head += "Content-Length: " + QByteArray::number(jpeg.size()) + "\r\n\r\n";
 
+    // Limite du backlog non-ecrit avant qu'on considere le client deconnecte.
+    // A ~750 KB/s (15 FPS × 50 KB jpeg), 1.5 MB = ~2s de frames non-lues.
+    // Au-dela on coupe : ferme les sockets de tabs Live ferme sans
+    // attendre TCP timeout (~60s).
+    constexpr qint64 STREAM_BACKLOG_LIMIT = 1500 * 1024;
+
     for (int i = m_streamClients.size() - 1; i >= 0; --i) {
         QPointer<QTcpSocket> &sp = m_streamClients[i];
         if (sp.isNull()) {
@@ -332,6 +338,14 @@ void HttpServer::onFrameReady(const QImage &img)
         if (s->state() != QAbstractSocket::ConnectedState) {
             m_streamClients.removeAt(i);
             s->deleteLater();
+            continue;
+        }
+        // Le client ne consomme plus (onglet inactif) -> on coupe.
+        if (s->bytesToWrite() > STREAM_BACKLOG_LIMIT) {
+            qDebug() << "[HttpServer] stream client inactif (backlog ="
+                     << s->bytesToWrite() << "octets) -> fermeture";
+            m_streamClients.removeAt(i);
+            s->disconnectFromHost();  // le signal disconnected fera le cleanup final
             continue;
         }
         s->write(head);
