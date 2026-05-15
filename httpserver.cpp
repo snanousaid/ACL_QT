@@ -15,6 +15,7 @@
 #include <QPointer>
 #include <QBuffer>
 #include <QDateTime>
+#include <QtConcurrent>
 
 #ifdef ACL_OPENCV_ENABLED
 #include <opencv2/imgcodecs.hpp>
@@ -161,6 +162,86 @@ void HttpServer::registerStreamClient(QTcpSocket *sock)
         qDebug() << "[HttpServer] stream client deconnecte —"
                  << m_streamClients.size() << "clients restants";
     });
+}
+
+// ── Extraction CV (worker thread) ──────────────────────────────────────────
+// Appele depuis QtConcurrent::run. Aucun acces a la connection : entree
+// (QByteArray) + sortie (ExtractionResult) seulement. Acces detector /
+// recognizer serialise par m_cvMutex.
+
+ExtractionResult HttpServer::runExtraction(
+    const QList<QByteArray> &autoImages,
+    const QMap<QString, QList<QByteArray>> &forcedByPose)
+{
+    ExtractionResult result;
+#ifdef ACL_OPENCV_ENABLED
+    auto processImage = [&](const QByteArray &raw, const QString &forcedPose) {
+        std::vector<uchar> buf(reinterpret_cast<const uchar*>(raw.constData()),
+                               reinterpret_cast<const uchar*>(raw.constData()) + raw.size());
+        cv::Mat img;
+        try { img = cv::imdecode(buf, cv::IMREAD_COLOR); }
+        catch (const cv::Exception &e) {
+            qWarning() << "[runExtraction] imdecode KO :" << e.what();
+            result.totalRejected++;
+            return;
+        }
+        if (img.empty()) {
+            qWarning() << "[runExtraction] image vide / format inconnu";
+            result.totalRejected++;
+            return;
+        }
+
+        cv::Mat faces;
+        try {
+            m_detector->setInputSize({img.cols, img.rows});
+            m_detector->detect(img, faces);
+        } catch (const cv::Exception &e) {
+            qWarning() << "[runExtraction] detect KO :" << e.what();
+            result.totalRejected++;
+            return;
+        }
+        if (faces.empty() || faces.rows == 0) {
+            qDebug() << "[runExtraction] aucun visage detecte";
+            result.totalRejected++;
+            return;
+        }
+        const int idx = bestFaceIdx(faces);
+        if (idx < 0) {
+            qDebug() << "[runExtraction] aucun visage valide";
+            result.totalRejected++;
+            return;
+        }
+
+        const cv::Mat best = faces.row(idx);
+        const QString pose = forcedPose.isEmpty() ? classifyPose(best) : forcedPose;
+
+        cv::Mat aligned, feat;
+        try {
+            m_recognizer->alignCrop(img, best, aligned);
+            m_recognizer->feature(aligned, feat);
+        } catch (const cv::Exception &e) {
+            qWarning() << "[runExtraction] feature KO :" << e.what();
+            result.totalRejected++;
+            return;
+        }
+
+        QVector<float> emb(static_cast<int>(feat.total()));
+        for (int i = 0; i < emb.size(); i++) emb[i] = feat.at<float>(i);
+        result.bins[pose].append(emb);
+        result.totalValid++;
+    };
+
+    QMutexLocker l(&m_cvMutex);
+    for (const QByteArray &raw : autoImages) processImage(raw, QString());
+    for (auto it = forcedByPose.constBegin(); it != forcedByPose.constEnd(); ++it) {
+        for (const QByteArray &raw : it.value()) processImage(raw, it.key());
+    }
+    result.ok = result.totalValid > 0;
+#else
+    Q_UNUSED(autoImages);
+    Q_UNUSED(forcedByPose);
+#endif
+    return result;
 }
 
 // ── Auth helpers ───────────────────────────────────────────────────────────
@@ -716,85 +797,32 @@ void HttpConnection::handleEnrollFromImages()
         return;
     }
 
-    // ── Extraction par image + auto-classification par pose ──────────────
-    // Si le client a fourni 'images' (champ unique), on auto-classifie via
-    // landmarks YuNet. Si le client a fourni 'images_<pose>' (mode legacy /
-    // future v2 live), on respecte la pose fournie.
-    QMap<QString, QVector<QVector<float>>> binsByPose;
-    int totalValid = 0;
-    int totalRejected = 0;
+    // ── Extraction CV deportee sur thread pool ────────────────────────────
+    // Sans ca, traiter 5-20 images bloque le main thread ~250ms-1s, ce qui
+    // gele le stream MJPEG pour tous les clients web pendant l'upload.
+    HttpServer *server = m_server;
+    QPointer<HttpConnection> self(this);
+    QtConcurrent::run([server, self, userId, allImages, imagesByPose] {
+        const ExtractionResult result = server->runExtraction(allImages, imagesByPose);
 
-    auto processImage = [&](const QByteArray &raw, const QString &forcedPose) {
-        std::vector<uchar> buf(reinterpret_cast<const uchar*>(raw.constData()),
-                               reinterpret_cast<const uchar*>(raw.constData()) + raw.size());
-        cv::Mat img;
-        try {
-            img = cv::imdecode(buf, cv::IMREAD_COLOR);
-        } catch (const cv::Exception &e) {
-            qWarning() << "[enroll-from-images] imdecode KO :" << e.what();
-            totalRejected++;
-            return;
-        }
-        if (img.empty()) {
-            qWarning() << "[enroll-from-images] image vide / format inconnu";
-            totalRejected++;
-            return;
-        }
+        // Retour sur main thread pour POST backend + envoi reponse au client.
+        QMetaObject::invokeMethod(server, [self, userId, result] {
+            if (!self) return;  // client deconnecte entre temps
+            self->finalizeEnrollUpload(userId, result);
+        }, Qt::QueuedConnection);
+    });
+#endif
+}
 
-        cv::Mat faces;
-        try {
-            m_server->m_detector->setInputSize({img.cols, img.rows});
-            m_server->m_detector->detect(img, faces);
-        } catch (const cv::Exception &e) {
-            qWarning() << "[enroll-from-images] detect KO :" << e.what();
-            totalRejected++;
-            return;
-        }
-        if (faces.empty() || faces.rows == 0) {
-            qDebug() << "[enroll-from-images] aucun visage detecte";
-            totalRejected++;
-            return;
-        }
-        const int idx = bestFaceIdx(faces);
-        if (idx < 0) {
-            qDebug() << "[enroll-from-images] aucun visage valide";
-            totalRejected++;
-            return;
-        }
-
-        const cv::Mat best = faces.row(idx);
-        const QString pose = forcedPose.isEmpty() ? classifyPose(best) : forcedPose;
-
-        cv::Mat aligned, feat;
-        try {
-            m_server->m_recognizer->alignCrop(img, best, aligned);
-            m_server->m_recognizer->feature(aligned, feat);
-        } catch (const cv::Exception &e) {
-            qWarning() << "[enroll-from-images] feature KO :" << e.what();
-            totalRejected++;
-            return;
-        }
-
-        QVector<float> emb(static_cast<int>(feat.total()));
-        for (int i = 0; i < emb.size(); i++) emb[i] = feat.at<float>(i);
-        binsByPose[pose].append(emb);
-        totalValid++;
-    };
-
-    {
-        QMutexLocker l(&m_server->m_cvMutex);
-        // Mode upload (champ 'images') : auto-classification
-        for (const QByteArray &raw : allImages) processImage(raw, QString());
-        // Mode legacy / v2 live (champ 'images_<pose>') : pose forcee
-        for (auto it = imagesByPose.constBegin(); it != imagesByPose.constEnd(); ++it) {
-            for (const QByteArray &raw : it.value()) processImage(raw, it.key());
-        }
-    }
-
+// Finalisation post-extraction : moyenne par pose + POST backend + reponse.
+// Appele sur main thread depuis le callback de QtConcurrent::run.
+void HttpConnection::finalizeEnrollUpload(const QString &userId,
+                                          const ExtractionResult &res)
+{
     // ── Moyenne + normalisation L2 par pose ───────────────────────────────
     QJsonObject embeddings;
     QJsonObject poseCounts;
-    for (auto it = binsByPose.constBegin(); it != binsByPose.constEnd(); ++it) {
+    for (auto it = res.bins.constBegin(); it != res.bins.constEnd(); ++it) {
         const auto &samples = it.value();
         if (samples.isEmpty()) continue;
         const int dim = samples[0].size();
@@ -819,8 +847,8 @@ void HttpConnection::handleEnrollFromImages()
     }
     qDebug() << "[enroll-from-images] userId=" << userId
              << "poses=" << embeddings.keys()
-             << "valides=" << totalValid
-             << "rejetees=" << totalRejected;
+             << "valides=" << res.totalValid
+             << "rejetees=" << res.totalRejected;
 
     // ── POST vers acl_controller /face/enroll ─────────────────────────────
     QJsonObject body;
@@ -860,11 +888,10 @@ void HttpConnection::handleEnrollFromImages()
         const auto root = QJsonDocument::fromJson(respBody).object();
         QJsonObject out;
         out["profileId"] = root.value("profileId");
-        out["isUpdate"] = root.value("isUpdate");
-        out["poses"]    = poseCounts;
+        out["isUpdate"]  = root.value("isUpdate");
+        out["poses"]     = poseCounts;
         self->writeResponse(200, QJsonDocument(out).toJson(QJsonDocument::Compact));
     });
-#endif
 }
 
 // ── Réponses HTTP ───────────────────────────────────────────────────────────

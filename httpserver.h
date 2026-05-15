@@ -17,6 +17,14 @@ class QNetworkAccessManager;
 class QNetworkReply;
 class AppController;
 
+// Resultat d'extraction d'embeddings (utilise pour async upload).
+struct ExtractionResult {
+    bool        ok = false;          // succes global
+    int         totalValid = 0;
+    int         totalRejected = 0;
+    QHash<QString, QVector<QVector<float>>> bins; // pose -> samples
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HttpServer — mini-serveur HTTP intégré au process Qt, pour permettre au
 // dashboard web ACL_133_FRONT d'enrôler des visages.
@@ -67,6 +75,11 @@ private:
 #endif
     bool m_modelsLoaded = false;
     bool loadModels();
+
+    // Extrait les embeddings hors main thread (appele depuis QtConcurrent).
+    // Acces aux modeles serialise par m_cvMutex.
+    ExtractionResult runExtraction(const QList<QByteArray> &autoImages,
+                                   const QMap<QString, QList<QByteArray>> &forcedByPose);
 
     // Liste des sockets en streaming MJPEG (long-poll).
     // QPointer pour gestion auto si client deconnecte.
@@ -131,6 +144,9 @@ private:
 
     void handleHealth();
     void handleEnrollFromImages();
+    // Finalisation post-extraction (appele sur main thread apres travail
+    // hors thread). userId + resultat -> POST backend -> reponse au client.
+    void finalizeEnrollUpload(const QString &userId, const ExtractionResult &res);
     void handleStream();
     void handleEnrollStart();
     void handleEnrollStatus();
