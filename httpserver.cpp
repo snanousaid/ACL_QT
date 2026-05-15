@@ -293,10 +293,9 @@ void HttpConnection::onReadyRead()
             parseHeaderLine(lines[i]);
         }
 
-        if (m_method == "POST" && m_contentLength <= 0) {
-            writeJsonError(411, "Content-Length required");
-            return;
-        }
+        // CL=0 OK : /enroll/finalize, /enroll/cancel, OPTIONS sont des POST
+        // sans corps. On accepte ; les handlers qui ont besoin d'un body
+        // (enroll-from-images, enroll/start) verifient leur entree eux-memes.
         if (m_contentLength > MAX_BODY_BYTES) {
             writeJsonError(413, "Body too large");
             return;
