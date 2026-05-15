@@ -15,6 +15,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
                 -lopencv_core \
                 -lopencv_videoio \
                 -lopencv_imgproc \
+                -lopencv_imgcodecs \
                 -lopencv_dnn \
                 -lopencv_objdetect \
                 -ltbb \
