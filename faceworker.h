@@ -44,14 +44,6 @@ signals:
     // sur une frame valide. AppController POST /face/match avec cet embedding.
     void faceMatchRequest(const QVector<float> &embedding);
 
-    // Anti-spoofing : "Tournez la tête" — défi actif émis quand un visage
-    // entre dans la ROI. QML affiche un overlay. Sans rotation détectée
-    // dans LIVENESS_TIMEOUT_MS, le match est refusé (probable photo).
-    void livenessChallenge();
-    // Émis quand le défi se résout : ok=true si pose latérale vue à temps,
-    // ok=false si timeout (probable spoof par photo).
-    void livenessResult(bool ok);
-
     // Enrôlement : progression visuelle (5 poses)
     void enrollProgress(const QVariantMap &status);
 
@@ -86,12 +78,6 @@ private:
     static constexpr int   ENROLL_MIN_WIDTH   = 80;
     static constexpr int   ENROLL_INTERVAL_MS = 150;
 
-    // ── Anti-spoofing (defi actif "Tournez la tete") ─────────────────────────
-    static constexpr qint64 LIVENESS_TIMEOUT_MS  = 3000;
-    static constexpr qint64 LIVENESS_COOLDOWN_MS = 2000;
-    // Apres N frames sans visage, on reset le challenge (nouvelle session).
-    static constexpr qint64 LIVENESS_RESET_MS    = 1000;
-
     // ── Helpers enrôlement (appelés depuis run() avec mutex tenu) ───────────
     QString nextPoseToFill_locked() const;
     bool    allRequiredDone_locked() const;
@@ -113,9 +99,4 @@ private:
     QString                                   m_enrollLastMsg;
     bool                                      m_enrollFinalizeRequested = false;
     qint64                                    m_enrollLastSampleMs      = 0;
-
-    // Liveness state (par session : reset quand le visage quitte la ROI)
-    qint64 m_livenessStartMs        = 0;     // 0 = pas de challenge en cours
-    bool   m_livenessPassed         = false;
-    qint64 m_livenessCooldownUntil  = 0;
 };

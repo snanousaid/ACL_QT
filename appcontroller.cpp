@@ -55,11 +55,6 @@ AppController::AppController(QObject *parent)
             this,   &AppController::onCamEnrollProgress);
     connect(m_face, &FaceWorker::enrollFinished,
             this,   &AppController::onCamEnrollFinished);
-    // Anti-spoofing : forward direct vers QML (overlay "Tournez la tete")
-    connect(m_face, &FaceWorker::livenessChallenge,
-            this,   &AppController::livenessChallenge);
-    connect(m_face, &FaceWorker::livenessResult,
-            this,   &AppController::livenessResult);
     m_face->start();
 
     // ── Timer reset faceAccess (3 s après granted/denied) ────────────────────

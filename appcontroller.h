@@ -91,12 +91,6 @@ signals:
     void ethernetResult(bool ok, const QString &msg);
     void networkApiError(const QString &op, const QString &msg);
 
-    // Anti-spoofing (forward depuis FaceWorker).
-    // QML peut afficher un overlay "Tournez la tete" sur livenessChallenge,
-    // et le masquer sur livenessResult.
-    void livenessChallenge();
-    void livenessResult(bool ok);
-
 private slots:
     void onBadgeEvent(const QString &evName, const QJsonObject &data);
     void onFaceEvent (const QString &evName, const QJsonObject &data);

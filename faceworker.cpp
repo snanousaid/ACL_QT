@@ -490,15 +490,6 @@ void FaceWorker::run()
 
         if (hasFace) lastFaceMs = nowMs;
 
-        // Reset liveness si visage absent > LIVENESS_RESET_MS (nouvelle session).
-        // Permet a un user qui repasse devant la camera de re-faire le defi.
-        if (!hasFace && m_livenessStartMs != 0 &&
-            (nowMs - lastFaceMs) > LIVENESS_RESET_MS) {
-            qDebug() << "[FaceWorker] liveness reset (visage absent)";
-            m_livenessStartMs = 0;
-            m_livenessPassed  = false;
-        }
-
         if (hasFace) {
             cv::Mat best = faces.row(bestIdx);
             inRoi = faceInRoi(best, frame.cols, frame.rows,
@@ -562,73 +553,48 @@ void FaceWorker::run()
                     // (finalize traite au top du loop, hors detection,
                     //  pour fonctionner meme sans visage dans ROI)
                 } else {
-                    // ── Mode détection — anti-spoofing + envoi embedding ───────
+                    // ── Mode détection — envoi embedding au backend ────────────
+                    // (Pas de match local : la DB est cote serveur, le backend
+                    //  fait cosinus + permission + emit access_event SocketIO.)
                     //
-                    // Pipeline :
-                    //   1. Liveness challenge ("Tournez la tete") — anti photo/ecran
-                    //   2. Si liveness OK : extraction SFace + emit match
-                    //
-                    // En cooldown post-failure ou post-event : on skip carrement.
-                    if (nowMs < m_livenessCooldownUntil) {
-                        // No-op, attendre fin du cooldown
+                    // SFace cooldown : evite de re-extraire l'embedding 30x/s
+                    // pour le meme visage stable.
+                    cv::Rect curBox(static_cast<int>(best.at<float>(0, 0)),
+                                    static_cast<int>(best.at<float>(0, 1)),
+                                    static_cast<int>(best.at<float>(0, 2)),
+                                    static_cast<int>(best.at<float>(0, 3)));
+                    bool sameFace = (lastFaceBox.width > 0)
+                                 && std::abs(curBox.x - lastFaceBox.x) < SFACE_BBOX_TOL_PX
+                                 && std::abs(curBox.y - lastFaceBox.y) < SFACE_BBOX_TOL_PX;
+                    bool sfaceFresh = (nowMs - lastSFaceMs) < SFACE_COOLDOWN_MS;
+
+                    if (sameFace && sfaceFresh) {
+                        // Meme visage recent : skip extraction (CPU)
                     } else {
-                        // Lance le challenge si pas deja en cours
-                        if (m_livenessStartMs == 0) {
-                            m_livenessStartMs = nowMs;
-                            m_livenessPassed  = false;
-                            qDebug() << "[FaceWorker] liveness challenge demarre";
-                            emit livenessChallenge();
+                        // Extraction embedding via SFace
+                        QVector<float> emb;
+                        try {
+                            recognizer->alignCrop(frame, best, aligned);
+                            recognizer->feature(aligned, feat);
+                            emb = matToVector(feat);
+                        } catch (const cv::Exception &e) {
+                            qDebug() << "[FaceWorker] embed error:" << e.what();
+                            emit faceStatusChanged(hasFace, inRoi, false);
+                            continue;
                         }
+                        lastSFaceMs = nowMs;
+                        lastFaceBox = curBox;
 
-                        // Tant que le challenge n'est pas passe, on track la pose
-                        if (!m_livenessPassed) {
-                            QString pose = estimatePose(best);
-                            if (pose == QStringLiteral("left") || pose == QStringLiteral("right")) {
-                                m_livenessPassed = true;
-                                qDebug() << "[FaceWorker] liveness OK (pose=" << pose << ")";
-                                emit livenessResult(true);
-                            } else if (nowMs - m_livenessStartMs > LIVENESS_TIMEOUT_MS) {
-                                // Timeout : probable photo ou ecran statique
-                                qDebug() << "[FaceWorker] liveness TIMEOUT — match refuse";
-                                emit livenessResult(false);
-                                m_livenessCooldownUntil = nowMs + LIVENESS_COOLDOWN_MS;
-                                m_livenessStartMs = 0;
-                            }
-                        }
-
-                        // Match seulement si liveness OK (SFace cooldown identique)
-                        if (m_livenessPassed) {
-                            cv::Rect curBox(static_cast<int>(best.at<float>(0, 0)),
-                                            static_cast<int>(best.at<float>(0, 1)),
-                                            static_cast<int>(best.at<float>(0, 2)),
-                                            static_cast<int>(best.at<float>(0, 3)));
-                            bool sameFace = (lastFaceBox.width > 0)
-                                         && std::abs(curBox.x - lastFaceBox.x) < SFACE_BBOX_TOL_PX
-                                         && std::abs(curBox.y - lastFaceBox.y) < SFACE_BBOX_TOL_PX;
-                            bool sfaceFresh = (nowMs - lastSFaceMs) < SFACE_COOLDOWN_MS;
-
-                            if (sameFace && sfaceFresh) {
-                                // Meme visage recent : skip extraction
-                            } else {
-                                QVector<float> emb;
-                                try {
-                                    recognizer->alignCrop(frame, best, aligned);
-                                    recognizer->feature(aligned, feat);
-                                    emb = matToVector(feat);
-                                } catch (const cv::Exception &e) {
-                                    qDebug() << "[FaceWorker] embed error:" << e.what();
-                                    emit faceStatusChanged(hasFace, inRoi, false);
-                                    continue;
-                                }
-                                lastSFaceMs = nowMs;
-                                lastFaceBox = curBox;
-
-                                emit faceMatchRequest(emb);
-                                eventFreezeUntilMs = nowMs + EVENT_FREEZE_MS;
-                                matched = true;
-                                qDebug() << "[FaceWorker] embedding -> backend (freeze 5s)";
-                            }
-                        }
+                        // Emit -> AppController POST /face/match
+                        // Le backend decide granted/denied/Anonyme + permission
+                        // + emit access_event SocketIO -> AppController.handleEvent
+                        // Cote Qt, on freeze toute detection 5s post-emit
+                        // (l'access_event arrive ~50-100ms apres, le freeze
+                        //  evite de spam le backend).
+                        emit faceMatchRequest(emb);
+                        eventFreezeUntilMs = nowMs + EVENT_FREEZE_MS;
+                        matched = true;   // pour faceStatusChanged en fin de loop
+                        qDebug() << "[FaceWorker] embedding -> backend (freeze 5s)";
                     }
                 }
             }
