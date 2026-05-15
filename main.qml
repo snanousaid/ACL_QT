@@ -159,6 +159,70 @@ Window {
             faceAccess:   controller.faceAccess
         }
 
+        // ── Liveness overlay ("Tournez la tete") ──────────────────────────────
+        // Anti-spoofing : affiche un challenge actif quand un visage entre
+        // dans la ROI. Disparait quand le user tourne la tete (livenessResult
+        // true) ou apres timeout (false, avec message rouge bref).
+        Rectangle {
+            id: livenessOverlay
+            anchors {
+                top: header.bottom
+                left: parent.left; right: parent.right
+                bottom: statusBar.top
+            }
+            color: "transparent"
+            z: 15
+
+            property bool active: false       // true = challenge en cours
+            property bool failed: false        // true brievement apres timeout
+            opacity: (active || failed) ? 1.0 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 200 } }
+
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 80
+                width: Math.min(parent.width - 40, 480)
+                height: 80
+                radius: 10
+                color: livenessOverlay.failed ? "#dc2626" : "#1f2937"
+                opacity: 0.92
+                border.color: livenessOverlay.failed ? "#ef4444" : "#60a5fa"
+                border.width: 2
+
+                Text {
+                    anchors.centerIn: parent
+                    text: livenessOverlay.failed
+                          ? "Verification echouee — reessayez"
+                          : "Tournez la tete ← ou →"
+                    color: "#ffffff"
+                    font.pixelSize: 22
+                    font.bold: true
+                }
+            }
+
+            Timer {
+                id: livenessFailTimer
+                interval: 1800
+                onTriggered: livenessOverlay.failed = false
+            }
+        }
+
+        Connections {
+            target: controller
+            onLivenessChallenge: {
+                livenessOverlay.failed = false
+                livenessOverlay.active = true
+            }
+            onLivenessResult: function(ok) {
+                livenessOverlay.active = false
+                if (!ok) {
+                    livenessOverlay.failed = true
+                    livenessFailTimer.restart()
+                }
+            }
+        }
+
         // ── Access card overlay ───────────────────────────────────────────────
         AccessCard {
             id: accessCard
