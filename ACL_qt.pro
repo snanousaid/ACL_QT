@@ -38,7 +38,8 @@ SOURCES += \
     framequeue.cpp \
     cameraworker.cpp \
     faceworker.cpp \
-    cameraimgprovider.cpp
+    cameraimgprovider.cpp \
+    httpserver.cpp
 
 HEADERS += \
     mjpegitem.h \
@@ -50,7 +51,8 @@ HEADERS += \
     cameraworker.h \
     faceworker.h \
     cameraimgprovider.h \
-    tapdetector.h
+    tapdetector.h \
+    httpserver.h
 
 RESOURCES += qml.qrc
 

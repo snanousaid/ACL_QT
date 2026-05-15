@@ -9,6 +9,7 @@
 #include "cameraimgprovider.h"
 #include "opencvtest.h"
 #include "tapdetector.h"
+#include "httpserver.h"
 
 int main(int argc, char *argv[])
 {
@@ -42,6 +43,18 @@ int main(int argc, char *argv[])
     app.installEventFilter(tapDetector);
     QObject::connect(tapDetector, &TapDetector::tapped,
                      ctrl,        &AppController::screenTapped);
+
+    // ── Serveur HTTP pour enrôlement web (ACL_133_FRONT) ─────────────────────
+    // Port 9090. Endpoints v1 : GET /health, POST /enroll-from-images.
+    // Le serveur charge ses propres modèles YuNet+SFace (indépendant du
+    // FaceWorker pour ne pas perturber le pipeline live).
+    HttpServer *httpServer = new HttpServer(
+        QStringLiteral("/opt/ACL_qt/models"),
+        QStringLiteral("http://localhost:80/api/v2"),
+        &app);
+    if (!httpServer->start(9090)) {
+        qWarning() << "[main] HttpServer KO — enrôlement web indisponible";
+    }
 
     // ── Image provider caméra C++ ─────────────────────────────────────────────
     CameraImgProvider *imgProvider = new CameraImgProvider();
